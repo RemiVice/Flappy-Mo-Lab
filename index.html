@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.42)</title>
+<title>Flappy Mo — Local Assets (v1.43)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -53,6 +53,17 @@
   #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.12); padding:6px; text-align:left; }
   #sysSpecs th{ font-weight:800; }
   #sysSpecs td:first-child{ font-weight:600; }
+
+  /* Loading overlay */
+  #loadingOverlay{
+    position:fixed; inset:0; display:grid; place-items:center;
+    background:#0b0d10; color:#fff; z-index:2000;
+    font-weight:800; font-size:18px; letter-spacing:.3px;
+  }
+  #loadingBox{
+    background:rgba(20,24,28,.85); border:1px solid rgba(255,255,255,.12);
+    border-radius:14px; padding:16px 20px; box-shadow:0 10px 30px rgba(0,0,0,.5);
+  }
 </style>
 </head>
 <body>
@@ -73,7 +84,7 @@
 <div class="overlay">
   <div id="startCard" class="card" role="button" aria-label="Start game">
     <h1 id="startTitle">Tap to Start</h1>
-    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.42</span></b></p>
+    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.43</span></b></p>
     <p id="fsHint" style="margin-top:10px; font-size:13px; opacity:.95; display:none; color:#ff4d4f">💡 Tip: For the best experience, use the ⛶ Fullscreen button.</p>
   </div>
 
@@ -103,9 +114,12 @@
   </div>
 </div>
 
+<!-- Loading overlay (prevents first-frame flash) -->
+<div id="loadingOverlay"><div id="loadingBox">Loading…</div></div>
+
 <script>
 (function () {
-  const VERSION = '1.42';
+  const VERSION = '1.43';
   const ua = navigator.userAgent;
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
   const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
@@ -115,7 +129,7 @@
 
   // Mobile performance: render at lower backbuffer, scale up
   let backW = WORLD_W, backH = WORLD_H;
-  if (isMobile) { backW = 1280; backH = 720; }  // big perf win on phones
+  if (isMobile) { backW = 1280; backH = 720; }  // perf boost on phones
 
   const SPEED_MULT = isMobile ? 1.40 : 1.50;
 
@@ -133,7 +147,6 @@
   const ctx = canvas.getContext('2d', { alpha:false });
   ctx.imageSmoothingEnabled = true;
 
-  // Backbuffer size for performance (world stays 1920×1080)
   function applyBackbuffer(){
     canvas.width = backW;
     canvas.height = backH;
@@ -143,7 +156,7 @@
 
   document.getElementById('verLabel').textContent = VERSION;
 
-  /* ===================== Fit & Orientation (CSS scale only) ===================== */
+  /* ===== Fit & Orientation (CSS scale only) ===== */
   function fitCanvas() {
     const vw = window.innerWidth;
     const vh = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
@@ -169,7 +182,7 @@
   window.addEventListener('orientationchange', checkOrientation);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', checkOrientation);
 
-  /* ===================== HUD + overlays ===================== */
+  /* ===== HUD + overlays ===== */
   const scoreEl = document.getElementById('scoreVal');
   const lastEl  = document.getElementById('lastVal');
   const bestEl  = document.getElementById('bestVal');
@@ -181,7 +194,6 @@
   const fsHintOver = document.getElementById('fsHintOver');
   const iosFsHint = document.getElementById('iosFsHint');
 
-  // Fullscreen support detection (iOS often lacks it for elements)
   function fsEnabled(){
     return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled || document.msFullscreenEnabled);
   }
@@ -193,15 +205,12 @@
     fsHintStart.style.display = (full || !fsEnabled()) ? 'none' : 'block';
     fsHintOver.style.display  = (full || !fsEnabled()) ? 'none' : 'block';
   }
-
-  // Hide FS button on platforms where it won't work (most iPhone setups)
   if (!fsEnabled() || (isiOS && !document.documentElement.requestFullscreen)) {
     fsBtn.style.display = 'none';
     iosFsHint.style.display = 'block';
   } else {
     iosFsHint.style.display = 'none';
   }
-
   fsBtn.addEventListener('click', async (e)=>{
     e.stopPropagation();
     const el = document.documentElement;
@@ -220,13 +229,13 @@
   }, {passive:false});
   ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
 
-  /* ===================== Game state ===================== */
+  /* ===== Game state ===== */
   let started=false, over=false, restartLocked=false;
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0);
   bestEl.textContent = best;
   let spawnTimer = 0;
 
-  /* ===================== Audio ===================== */
+  /* ===== Audio ===== */
   let audioCtx = null, masterGain = null;
   let muted = false, audioReady = false;
   function setMuted(m){
@@ -295,8 +304,9 @@
   const playFlap = () => woosh(0.25);
   const playHit  = () => oceanWave(1.6);
 
-  function loadImageWithTimeout(src, timeoutMs=3000){
+  function loadImageWithTimeout(src, timeoutMs=6000){
     return new Promise((resolve) => {
+      if(!src){ resolve(null); return; }
       const img = new Image(); img.referrerPolicy = 'no-referrer';
       let done = false;
       const finish = (val)=>{ if(done) return; done = true; resolve(val || null); };
@@ -305,6 +315,30 @@
       img.onerror = ()=>{ clearTimeout(timer); finish(null); };
       img.src = src;
     });
+  }
+
+  /* ===== Procedural fallbacks (in case an image fails) ===== */
+  function makeCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+  function buildFallbackBG(){
+    const c = makeCanvas(1920,1080);
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0,0,0,1080);
+    grad.addColorStop(0,'#7ed0ff'); grad.addColorStop(1,'#d9f4ff');
+    g.fillStyle = grad; g.fillRect(0,0,1920,1080);
+    g.globalAlpha=0.35; g.fillStyle='#fff'; g.beginPath(); g.arc(1600,220,160,0,Math.PI*2); g.fill(); g.globalAlpha=1;
+    return c;
+  }
+  function buildFallbackBird(){
+    const c = makeCanvas(256,256);
+    const g = c.getContext('2d'); g.translate(128,128);
+    const bodyGrad = g.createRadialGradient(0,-20,20,0,0,120);
+    bodyGrad.addColorStop(0,'#ffec77'); bodyGrad.addColorStop(1,'#f5b91a');
+    g.fillStyle = bodyGrad; g.beginPath(); g.arc(0,0,90,0,Math.PI*2); g.fill();
+    g.fillStyle='rgba(255,255,255,0.65)'; g.beginPath(); g.ellipse(-20,10,35,25,-0.4,0,Math.PI*2); g.fill();
+    g.fillStyle='#fff'; g.beginPath(); g.arc(30,-20,16,0,Math.PI*2); g.fill();
+    g.fillStyle='#222'; g.beginPath(); g.arc(34,-18,7,0,Math.PI*2); g.fill();
+    g.fillStyle='#ff7f2a'; g.beginPath(); g.moveTo(90,-6); g.lineTo(130,10); g.lineTo(90,26); g.closePath(); g.fill();
+    return c;
   }
 
   // Bird (with prev-state for interpolation)
@@ -323,7 +357,9 @@
       ctx.translate(this.x+this.w/2,ySnap+this.h/2);
       ctx.rotate(a);
       if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
-      else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
+      else { // should never happen now (fallback provided), but keep a guard
+        ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);
+      }
       ctx.restore();
     },
     step(dt){
@@ -339,8 +375,8 @@
   function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
   function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
     if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
-    const scale = drawW / img.naturalWidth;
-    const scaledH = Math.max(1, Math.round(img.naturalHeight * scale));
+    const scale = drawW / (img.naturalWidth || img.width);
+    const scaledH = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
     const capH    = Math.max(1, Math.round(capPxSrc * scale));
     const full = makeScaledCanvas(img, drawW, scaledH);
     const cap  = document.createElement("canvas");
@@ -440,7 +476,7 @@
         if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
       }
     }
-    for(let i=pipes.length-1;i>=0;i--) if(pipes[i].x + pipes[i].w <= 0) pipes.splice(i,1);
+    for(let i=pipes.length-1;i>=0;i--) if(pipes[i].x + p.w <= 0) pipes.splice(i,1);
   }
 
   function drawBackground(){
@@ -521,7 +557,7 @@
       ] } }
   ];
 
-  // Preload system images
+  // Preload system images (optional)
   const _imgCache = new Map();
   function preloadImage(url){
     if(!url || url==="#" || _imgCache.has(url)) return;
@@ -534,7 +570,7 @@
   }
   function preloadSystemImages(){ try{ SYSTEMS.forEach(s=>preloadImage(s.img)); }catch(_){} }
 
-  /* ===================== Fixed-step update + interpolation ===================== */
+  /* ===== Fixed-step update + interpolation ===== */
   const FIXED_HZ = isMobile ? 120 : 240;
   const FIXED_DT = 1 / FIXED_HZ;
   const MAX_FRAME_DT = 0.1;
@@ -545,7 +581,6 @@
     bird.prevY = bird.y;
     for (const p of pipes) p.prevX = p.x;
   }
-
   function loop(ts){
     let frameDt = (ts - lastTs) / 1000;
     if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT;
@@ -556,7 +591,7 @@
 
     while (accumulator >= FIXED_DT) {
       beforeStepCopyPrev();
-      if(started && !over /* allow running regardless of orientation */){
+      if(started && !over){
         physicsStep(FIXED_DT);
       }
       accumulator -= FIXED_DT;
@@ -576,7 +611,7 @@
     requestAnimationFrame(loop);
   }
 
-  /* ===================== Flow ===================== */
+  /* ===== Flow ===== */
   function startGame(){
     started=true; over=false; restartLocked=false; spawnTimer=0;
     lastScore = score; lastEl.textContent = lastScore;
@@ -588,7 +623,7 @@
   function endGame(hitStyleIdx=null){
     if(over) return;
     over=true;
-    oceanWave(1.6);
+    playHit();
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
 
     const box   = document.getElementById('sysInfoBox');
@@ -663,20 +698,17 @@
     updateFsBtn();
   }
 
-  /* ===================== INPUT (now more robust) ===================== */
+  /* ===== INPUT (robust) ===== */
   let lastTap=0;
   let touchStartY=null, touchMoved=false;
 
-  // Start card is directly clickable/touchable
   startCard.addEventListener('click', handleTap, {passive:false});
   startCard.addEventListener('touchstart', (e)=>{ handleTap(e); }, {passive:false});
 
-  // Keep scroll in Game Over card from bubbling
   gameOverCard.addEventListener('touchstart', (e)=>{ touchStartY = e.touches?.[0]?.clientY ?? null; touchMoved=false; e.stopPropagation(); }, {passive:false});
   gameOverCard.addEventListener('touchmove', (e)=>{ if(touchStartY!=null){ const dy=Math.abs((e.touches?.[0]?.clientY??touchStartY)-touchStartY); if(dy>8) touchMoved=true; } e.stopPropagation(); }, {passive:false});
   gameOverCard.addEventListener('touchend', (e)=>{ e.stopPropagation(); }, {passive:false});
 
-  // Unified tap handler — now ALWAYS allows starting, even if portrait
   async function handleTap(e){
     if(e){ try{ e.preventDefault(); e.stopPropagation(); }catch(_){ } }
     try { await initAudioOnce(); try { await audioCtx.resume(); } catch(_){} setMuted(muted); } catch(_){}
@@ -689,56 +721,63 @@
   }
 
   function docTapGate(e){
-    if (document.querySelector('.rot-overlay.show')) {
-      // Even in portrait we now start, so don't block — just fall through
-    }
     if (!started && !startCard.classList.contains('hidden')) { handleTap(e); return; }
-
     if (!gameOverCard.classList.contains('hidden')) {
       if (touchMoved) return;
       if (e.target.closest('#gameOverCard')) return;
       if (e.target.closest('#muteBtn, #fsBtn')) return;
       handleTap(e); return;
     }
-
     if (!e.target.closest('#muteBtn, #fsBtn')) handleTap(e);
   }
-
-  // Pointer events
   document.addEventListener('pointerdown', docTapGate, {passive:false, capture:true});
-  // Fallbacks for older iOS/webviews
   document.addEventListener('touchstart', docTapGate, {passive:false, capture:true});
   document.addEventListener('click', docTapGate, {passive:false, capture:true});
 
-  /* ===================== Boot ===================== */
-  function startBoot(){
-    safeFit();
-    lastTs = performance.now();
-    requestAnimationFrame(loop);
-  }
-
-  // Local asset URLs
+  /* ===== Boot (gated) ===== */
   const BG_URL   = "assets/bg.png";
   const BIRD_URL = "assets/bird.png";
   let bgImg = null, birdImg = null;
 
-  (function instantKick(){ forceToStartScreen(); checkOrientation(); startBoot(); preloadSystemImages(); })();
+  // 1) Load core images first; 2) generate fallbacks if needed; 3) THEN start loop; 4) load pipes in background
+  (async function gatedBoot(){
+    const loadingEl = document.getElementById('loadingOverlay');
 
-  (function bootLoader(){
+    const [bg, bird] = await Promise.all([
+      loadImageWithTimeout(BG_URL),
+      loadImageWithTimeout(BIRD_URL)
+    ]);
+
+    // Fallbacks to avoid first-frame placeholders if an asset is missing
+    bgImg   = bg   || buildFallbackBG();
+    birdImg = bird || buildFallbackBird();
+
+    // Now that visuals exist, set up UI and start loop
+    forceToStartScreen();
+    checkOrientation();
+    lastTs = performance.now();
+    requestAnimationFrame(loop);
+
+    // Hide loading overlay AFTER first ready frame queued
+    setTimeout(()=>{ if (loadingEl) loadingEl.style.display = 'none'; }, 30);
+
+    // Preload system images + pipe bitmaps in the background
+    preloadSystemImages();
+
+    // Load pipes; rebuild styles when done
     const promises = [];
-    promises.push(loadImageWithTimeout(BG_URL));
-    promises.push(loadImageWithTimeout(BIRD_URL));
     for (const s of PIPE_STYLES_CFG){
       promises.push(loadImageWithTimeout(s.bottom.url));
       promises.push(loadImageWithTimeout(s.top.url));
     }
-    Promise.allSettled(promises).then(results=>{
-      let i=0; bgImg = results[i++]?.value || null; birdImg = results[i++]?.value || null;
-      const bottoms=[], tops=[];
-      for(let k=0;k<PIPE_STYLES_CFG.length;k++){ bottoms[k]=results[i++]?.value || null; tops[k]=results[i++]?.value || null; }
-      Raw.bottoms = bottoms; Raw.tops = tops;
-      rebuildStyles();
-    });
+    const results = await Promise.allSettled(promises);
+    const bottoms=[], tops=[];
+    for(let i=0;i<PIPE_STYLES_CFG.length;i++){
+      bottoms[i] = results[i*2]?.value || null;
+      tops[i]    = results[i*2+1]?.value || null;
+    }
+    Raw.bottoms = bottoms; Raw.tops = tops;
+    rebuildStyles();
   })();
 
 })(); // end IIFE
