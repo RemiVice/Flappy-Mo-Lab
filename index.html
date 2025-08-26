@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.43)</title>
+<title>Flappy Mo — Local Assets (v1.44)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -84,7 +84,7 @@
 <div class="overlay">
   <div id="startCard" class="card" role="button" aria-label="Start game">
     <h1 id="startTitle">Tap to Start</h1>
-    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.43</span></b></p>
+    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.44</span></b></p>
     <p id="fsHint" style="margin-top:10px; font-size:13px; opacity:.95; display:none; color:#ff4d4f">💡 Tip: For the best experience, use the ⛶ Fullscreen button.</p>
   </div>
 
@@ -119,7 +119,7 @@
 
 <script>
 (function () {
-  const VERSION = '1.43';
+  const VERSION = '1.44';
   const ua = navigator.userAgent;
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
   const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
@@ -317,7 +317,7 @@
     });
   }
 
-  /* ===== Procedural fallbacks (in case an image fails) ===== */
+  /* ===== Procedural fallbacks ===== */
   function makeCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
   function buildFallbackBG(){
     const c = makeCanvas(1920,1080);
@@ -357,9 +357,7 @@
       ctx.translate(this.x+this.w/2,ySnap+this.h/2);
       ctx.rotate(a);
       if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
-      else { // should never happen now (fallback provided), but keep a guard
-        ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);
-      }
+      else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
       ctx.restore();
     },
     step(dt){
@@ -476,7 +474,8 @@
         if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
       }
     }
-    for(let i=pipes.length-1;i>=0;i--) if(pipes[i].x + p.w <= 0) pipes.splice(i,1);
+    // ✅ BUGFIX: use pipes[i].w (not p.w)
+    for(let i=pipes.length-1;i>=0;i--) if(pipes[i].x + pipes[i].w <= 0) pipes.splice(i,1);
   }
 
   function drawBackground(){
@@ -739,7 +738,6 @@
   const BIRD_URL = "assets/bird.png";
   let bgImg = null, birdImg = null;
 
-  // 1) Load core images first; 2) generate fallbacks if needed; 3) THEN start loop; 4) load pipes in background
   (async function gatedBoot(){
     const loadingEl = document.getElementById('loadingOverlay');
 
@@ -748,23 +746,18 @@
       loadImageWithTimeout(BIRD_URL)
     ]);
 
-    // Fallbacks to avoid first-frame placeholders if an asset is missing
     bgImg   = bg   || buildFallbackBG();
     birdImg = bird || buildFallbackBird();
 
-    // Now that visuals exist, set up UI and start loop
     forceToStartScreen();
     checkOrientation();
     lastTs = performance.now();
     requestAnimationFrame(loop);
 
-    // Hide loading overlay AFTER first ready frame queued
     setTimeout(()=>{ if (loadingEl) loadingEl.style.display = 'none'; }, 30);
 
-    // Preload system images + pipe bitmaps in the background
     preloadSystemImages();
 
-    // Load pipes; rebuild styles when done
     const promises = [];
     for (const s of PIPE_STYLES_CFG){
       promises.push(loadImageWithTimeout(s.bottom.url));
