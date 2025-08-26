@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46)</title>
+<title>Flappy Mo — Local Assets (v1.46b)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -84,7 +84,7 @@
 <div class="overlay">
   <div id="startCard" class="card" role="button" aria-label="Start game">
     <h1 id="startTitle">Tap to Start</h1>
-    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.46</span></b></p>
+    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.46b</span></b></p>
     <p id="fsHint" style="margin-top:10px; font-size:13px; opacity:.95; display:none; color:#ff4d4f">💡 Tip: For the best experience, use the ⛶ Fullscreen button.</p>
   </div>
 
@@ -119,7 +119,7 @@
 
 <script>
 (function () {
-  const VERSION = '1.46';
+  const VERSION = '1.46b';
   const ua = navigator.userAgent;
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
   const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
@@ -384,7 +384,6 @@
 
   /* ===== Obstacles: vertical pipes + horizontal bar ===== */
   const obstacles = []; // {type:'vpipe'|'hbar', ...}
-  let lastSpawnedAtX = WORLD_W;
 
   function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 
@@ -404,9 +403,7 @@
 
     const styleIndex = Math.floor(Math.random()*Styles.length);
     const sty = Styles[styleIndex];
-    const obj = { type:'vpipe', x:WORLD_W, prevX:WORLD_W, top, gap, w:sty.drawW, styleIndex, scored:false };
-    obstacles.push(obj);
-    lastSpawnedAtX = obj.x;
+    obstacles.push({ type:'vpipe', x:WORLD_W, prevX:WORLD_W, top, gap, w:sty.drawW, styleIndex, scored:false });
   }
 
   // Single horizontal bar (using rotated bottom pipe), with left cap and body tiling to the right
@@ -418,7 +415,7 @@
     const marginY = Math.round(WORLD_H * 0.15);
     const yTop = randInt(marginY, WORLD_H - marginY - sty.hbar.thickness);
 
-    const obj = {
+    obstacles.push({
       type:'hbar',
       x: WORLD_W, prevX: WORLD_W,
       y: yTop, // top of bar
@@ -426,17 +423,13 @@
       styleIndex,
       thickness: sty.hbar.thickness,
       scored:false
-    };
-    obstacles.push(obj);
-    lastSpawnedAtX = obj.x;
+    });
   }
 
   function spawnObstacle(){
     if (TEST_FIRST_HORIZONTAL && !spawnedHorizontalTest){
       spawnedHorizontalTest = true;
       spawnHBar();
-      // give extra time before next spawn to avoid overlap during test
-      spawnTimer = -0.5;
       return;
     }
     spawnVPipe();
@@ -499,11 +492,52 @@
     }
   }
 
+  // Bird (with prev-state for interpolation)
+  const bird={
+    x:Math.round(WORLD_W*0.167),
+    y:Math.round(WORLD_H*0.5),
+    w:Math.round(WORLD_H*0.069),
+    h:Math.round(WORLD_H*0.069),
+    v:0,
+    prevY:0,
+    draw(alpha){
+      const yLerp = this.prevY + (this.y - this.prevY) * alpha;
+      const ySnap = Math.round(yLerp);
+      ctx.save();
+      const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
+      ctx.translate(this.x+this.w/2,ySnap+this.h/2);
+      ctx.rotate(a);
+      if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
+      else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
+      ctx.restore();
+    },
+    step(dt){
+      this.v += G_PPS2 * dt;
+      if (this.v > MAX_FALL_PPS) this.v = MAX_FALL_PPS;
+      this.y += this.v * dt;
+    },
+    flap(){ this.v = LIFT_V0; playFlap(); },
+    reset(){ this.y=Math.round(WORLD_H*0.5); this.prevY=this.y; this.v=0; }
+  };
+
   function drawBackground(){
     if(bgImg) ctx.drawImage(bgImg,0,0,WORLD_W,WORLD_H);
     else { ctx.fillStyle="#1e1e1e"; ctx.fillRect(0,0,WORLD_W,WORLD_H); }
   }
 
+  // Vertical pipe draw helpers
+  function drawBodyTiled(x,yStart,totalH,tile,mode,w){
+    const th=tile.height; if(totalH<=0||th<=0) return;
+    if(mode==="topUp"){
+      let y=totalH-th;
+      while(y>=0){ ctx.drawImage(tile,x,y,w,th); y-=th; }
+      const rem=totalH%th; if(rem>0) ctx.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem);
+    } else {
+      let y=yStart, end=yStart+totalH;
+      while(y+th<=end){ ctx.drawImage(tile,x,y,w,th); y+=th; }
+      const left=end-y; if(left>0) ctx.drawImage(tile,0,0,tile.width,left,x,y,w,left);
+    }
+  }
   function drawVPipes(alpha){
     obstacles.forEach(o=>{
       if (o.type !== 'vpipe') return;
@@ -535,19 +569,7 @@
     });
   }
 
-  // Tile a vertical body canvas along Y (existing), and a horizontal body along X (new)
-  function drawBodyTiled(x,yStart,totalH,tile,mode,w){
-    const th=tile.height; if(totalH<=0||th<=0) return;
-    if(mode==="topUp"){
-      let y=totalH-th;
-      while(y>=0){ ctx.drawImage(tile,x,y,w,th); y-=th; }
-      const rem=totalH%th; if(rem>0) ctx.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem);
-    } else {
-      let y=yStart, end=yStart+totalH;
-      while(y+th<=end){ ctx.drawImage(tile,x,y,w,th); y+=th; }
-      const left=end-y; if(left>0) ctx.drawImage(tile,0,0,tile.width,left,x,y,w,left);
-    }
-  }
+  // Horizontal body tiling
   function drawBodyTiledX(xStart,y,totalW,tile,h){
     const tw=tile.width; if(totalW<=0||tw<=0) return;
     let x=xStart, end=xStart+totalW;
@@ -564,11 +586,10 @@
       const interpX = o.prevX + (o.x - o.prevX) * alpha;
       const renderX = Math.round(interpX);
 
-      // Left-facing cap (rotated bottom cap)
       const cap = sty.hbar.cap;
       const body = sty.hbar.body;
 
-      const capW = cap.width; // extends into the bar along +X
+      const capW = cap.width;
       const capH = H;
 
       // Cap
@@ -594,50 +615,10 @@
     { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
   ];
 
-  const SYSTEMS = [
-    { title: "EATNASTAK (DOUBLE FACE)", blurb: "When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility...", img: "assets/pipe1.png", tds: "#",
-      specs: [["Width","24, 30, 36\""],["Depth","7–16\""],["Height","30\" to 108\""],["Shelf Load Capacity","Up to 50 psf"]] },
-    { title: "SMARTSHELF (FIXED, FULL DEPTH)", blurb: "Montel's patented SmartShelf is the most versatile storage shelving system available today...", img: "assets/pipe2.png", tds: "#",
-      specs: [["Width","24, 30, 36, 1M, 42, 48, 54\""],["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],["Height","30\" to 120\""],["Frame Load Capacity","Up to 2,500 lbs per frame"],["Shelf Load Capacity","Up to 500 lbs per shelf"]] },
-    { title: "4D Wide Span", blurb: "Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution...", img: "assets/pipe3.png", tds: "#",
-      specs: [["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],["Load per Level","3\" Beam: 1,000 lbs per pair (454 kg)"],["Span","4\" Beam: 1,500 lbs per pair (680 kg)"],["Height","4' to 8' (1.2 m to 2.4 m)"],["Depth","Up to 20' (6.1 m)"]] },
-    { title: "SmartSpace", blurb: "Montel’s SmartSpace storage system offers a cost-effective and versatile solution...", img: "assets/pipe4.png", tds: "#",
-      specs: [["Section Load Capacity","2,000 lbs per section (907 kg)"],["Section Length","24\" to 48\" (0.61 m – 1.2 m)"],["Section Depth","Panels: 12\" to 48\"; Columns: 18\" to 48\""],["Carriage Load Capacity","16,000 lbs per carriage (7 270 kg)"],["Carriage Length","Max 24' (7.3 m)"]] },
-    { title: "SmartGlide", blurb: "Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system...", img: "assets/pipe5.png", tds: "#", specs: [] },
-    { title: "GREENRAK", blurb: "Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications...", img: "assets/greenrak.png", tds: "#",
-      specTable: { headers:["Specification","Section","Mobile"], rows:[["Load","Max 2,400 lbs/section","Max 18,000 lbs/mobile"],["Depth","—","36\", 42\", 48\""],["Length","4’, 8’","Max 50’"]] } },
-    { title: "Mobilex", blurb: "Montel's Mobilex mechanical-assist mobile storage systems provide your organization with the flexibility...", img: "assets/pipe7.png", tds: "#",
-      specs: [["Load Capacity","1,000 lbs per linear foot (1 488 kg/m)"],["Depth","3' to 45' (0.91 m – 13.7 m)"],["Length","15\" to 48\" (0.4 m – 2.4 m)"]] },
-    { title: "SAFERAK 32P & 60P", blurb: "Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system...", img: "assets/pipe8.png", tds: "#",
-      specTable: { headers:["Specification","SAFERAK 32P","SAFERAK 60P"], rows:[
-        ["Load per Double-Bay","32,000 lbs (14 500 kg)","60,000 lbs (27 200 kg)"],
-        ["Load per Carriage","256,000 lbs (116 000 kg)","480,000 lbs (217 600 kg)"],
-        ["Bay Depth","Up to 8' (2.4 m)","Up to 8' (2.4 m)"],
-        ["Bay Width","Up to 12' (3.6 m)","Up to 12' (3.6 m)"],
-        ["Carriage Length","Up to 100’ (30 m)","Up to 120’ (36 m)"],
-        ["Industrial Safeties","YES","YES"],
-        ["PLC","YES","YES"],
-        ["Touchscreen UI","YES","YES"],
-        ["Signal Strobe and Buzzers","YES","YES"],
-        ["VPN eWon Connectivity","YES","YES"],
-        ["Rear Controls","Optional","Optional"],
-        ["In-Aisle E-Stops","Optional","Optional"],
-        ["Illuminated E-Stops","Optional","Optional"]
-      ] } }
-  ];
+  const SYSTEMS = []; // (keeping Game Over simple for this build)
 
-  // Preload system images (optional)
-  const _imgCache = new Map();
-  function preloadImage(url){
-    if(!url || url==="#" || _imgCache.has(url)) return;
-    const link = document.createElement('link');
-    try{ link.rel='preload'; link.as='image'; link.href=url; document.head.appendChild(link); }catch(_){}
-    const im = new Image(); im.decoding='async'; im.loading='eager';
-    im.onload = ()=>_imgCache.set(url, im);
-    im.onerror= ()=>_imgCache.set(url, null);
-    im.src = url;
-  }
-  function preloadSystemImages(){ try{ SYSTEMS.forEach(s=>preloadImage(s.img)); }catch(_){} }
+  // Preload system images (optional, no-op here)
+  function preloadSystemImages(){}
 
   /* ===== Fixed-step update + interpolation ===== */
   const FIXED_HZ = isMobile ? 120 : 240;
@@ -691,27 +672,12 @@
     startCard.classList.add('hidden');
     gameOverCard.classList.add('hidden');
   }
-  function endGame(hitStyleIdx=null){
+  function endGame(){
     if(over) return;
     over=true;
-    playHit();
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
-
-    const box   = document.getElementById('sysInfoBox');
-    const imgEl = document.getElementById('sysImg');
-    const tEl   = document.getElementById('sysTitle');
-    const bEl   = document.getElementById('sysBlurb');
-    const specsBox = document.getElementById('sysSpecsBox');
-    const sEl   = document.getElementById('sysSpecs');
-    const lEl   = document.getElementById('sysLinks');
-
-    box.style.display = 'none'; imgEl.style.display='none'; // keep it simple here
-
     gameOverCard.classList.remove('hidden');
     gameOverCard.scrollTop = 0;
-    requestAnimationFrame(()=>{ gameOverCard.scrollTop = 0; });
-    setTimeout(()=>{ gameOverCard.scrollTop = 0; }, 50);
-
     updateFsBtn();
     restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
   }
@@ -721,9 +687,6 @@
     drawBackground();
     bird.reset(); bird.draw(0);
     startCard.classList.remove('hidden');
-    startCard.scrollTop = 0;
-    requestAnimationFrame(()=>{ startCard.scrollTop = 0; });
-    setTimeout(()=>{ startCard.scrollTop = 0; }, 50);
     gameOverCard.classList.add('hidden');
     updateFsBtn();
   }
@@ -753,44 +716,65 @@
   document.addEventListener('touchstart', docTapGate, {passive:false, capture:true});
   document.addEventListener('click', docTapGate, {passive:false, capture:true});
 
-  /* ===== Boot (gated) ===== */
+  /* ===== Boot (gated, with hard failsafe) ===== */
   const BG_URL   = "assets/bg.png";
   const BIRD_URL = "assets/bird.png";
   let bgImg = null, birdImg = null;
 
-  (async function gatedBoot(){
-    const loadingEl = document.getElementById('loadingOverlay');
+  const loadingEl = document.getElementById('loadingOverlay');
+  // Hard failsafe: hide loading overlay regardless after 1200ms
+  const hideLoading = ()=>{ if (loadingEl) loadingEl.style.display = 'none'; };
+  setTimeout(hideLoading, 1200);
 
-    const [bg, bird] = await Promise.all([
-      loadImageWithTimeout(BG_URL),
-      loadImageWithTimeout(BIRD_URL)
-    ]);
+  async function gatedBoot(){
+    try {
+      const [bg, bird] = await Promise.all([
+        loadImageWithTimeout(BG_URL),
+        loadImageWithTimeout(BIRD_URL)
+      ]);
 
-    bgImg   = bg   || buildFallbackBG();
-    birdImg = bird || buildFallbackBird();
+      bgImg   = bg   || buildFallbackBG();
+      birdImg = bird || buildFallbackBird();
 
-    forceToStartScreen();
-    checkOrientation();
-    lastTs = performance.now();
-    requestAnimationFrame(loop);
+      forceToStartScreen();
+      checkOrientation();
+      lastTs = performance.now();
+      requestAnimationFrame(loop);
 
-    setTimeout(()=>{ if (loadingEl) loadingEl.style.display = 'none'; }, 30);
+      // hide loading (normal path)
+      hideLoading();
 
-    // Preload pipe images
-    const promises = [];
-    for (const s of PIPE_STYLES_CFG){
-      promises.push(loadImageWithTimeout(s.bottom.url));
-      promises.push(loadImageWithTimeout(s.top.url));
+      // Preload pipe images (don’t block the game)
+      const promises = [];
+      for (const s of PIPE_STYLES_CFG){
+        promises.push(loadImageWithTimeout(s.bottom.url));
+        promises.push(loadImageWithTimeout(s.top.url));
+      }
+      const results = await Promise.allSettled(promises);
+      const bottoms=[], tops=[];
+      for(let i=0;i<PIPE_STYLES_CFG.length;i++){
+        bottoms[i] = results[i*2]?.value || null;
+        tops[i]    = results[i*2+1]?.value || null;
+      }
+      Raw.bottoms = bottoms; Raw.tops = tops;
+      rebuildStyles();
+    } catch (e){
+      // If anything throws, still bring up the game with fallbacks and hide loading
+      bgImg   = buildFallbackBG();
+      birdImg = buildFallbackBird();
+      forceToStartScreen();
+      checkOrientation();
+      lastTs = performance.now();
+      requestAnimationFrame(loop);
+      hideLoading();
     }
-    const results = await Promise.allSettled(promises);
-    const bottoms=[], tops=[];
-    for(let i=0;i<PIPE_STYLES_CFG.length;i++){
-      bottoms[i] = results[i*2]?.value || null;
-      tops[i]    = results[i*2+1]?.value || null;
-    }
-    Raw.bottoms = bottoms; Raw.tops = tops;
-    rebuildStyles();
-  })();
+  }
+
+  // Extra insurance: if any error bubbles up, hide loading and try to proceed
+  window.addEventListener('error', hideLoading, {passive:true});
+  window.addEventListener('unhandledrejection', hideLoading, {passive:true});
+
+  gatedBoot();
 
 })(); // end IIFE
 </script>
