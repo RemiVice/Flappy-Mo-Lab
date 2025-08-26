@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.50-beta)</title>
+<title>Flappy Mo — Local Assets (v1.51-beta)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,6 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* Canvas always centered; JS resizes scale() */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -30,12 +29,9 @@
     box-shadow:0 10px 30px rgba(0,0,0,.5);
     max-width:min(92vw,560px); max-height:calc(100vh - 64px);
     overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
-    scroll-behavior:smooth; cursor:pointer;
+    cursor:pointer;
   }
   .card h1{ margin:0 0 8px; font-size:clamp(20px,4vw,34px); font-weight:800 }
-  .card p{ margin:0; font-size:clamp(13px,3.2vw,16px) }
-  .hidden{ display:none }
-
   .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
   .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
 
@@ -47,22 +43,10 @@
   .mute-btn{ right:12px; top:12px; }
   .fs-btn{ right:12px; bottom:12px; }
 
-  #iosFsHint{ position:fixed; right:12px; bottom:12px; z-index:12; color:#fff; font-size:12px; background:var(--glass); border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; display:none; }
-
-  #sysImg { max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px 0; display:none; opacity:0; transition:opacity .25s ease; }
-  #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.12); padding:6px; text-align:left; }
-  #sysSpecs th{ font-weight:800; }
-  #sysSpecs td:first-child{ font-weight:600; }
-
-  /* Loading overlay */
   #loadingOverlay{
     position:fixed; inset:0; display:grid; place-items:center;
     background:#0b0d10; color:#fff; z-index:2000;
-    font-weight:800; font-size:18px; letter-spacing:.3px;
-  }
-  #loadingBox{
-    background:rgba(20,24,28,.85); border:1px solid rgba(255,255,255,.12);
-    border-radius:14px; padding:16px 20px; box-shadow:0 10px 30px rgba(0,0,0,.5);
+    font-weight:800; font-size:18px;
   }
 </style>
 </head>
@@ -76,729 +60,63 @@
   <div class="badge">Last:  <span id="lastVal">0</span></div>
   <div class="badge">Best:  <span id="bestVal">0</span></div>
 </div>
-<button id="muteBtn" class="mute-btn" aria-pressed="false" title="Toggle sound">🔊 Sound</button>
-<button id="fsBtn" class="fs-btn" title="Fullscreen">⛶ Fullscreen</button>
-<div id="iosFsHint">Tip: On iPhone, use “Add to Home Screen” for true fullscreen.</div>
+<button id="muteBtn" class="mute-btn" aria-pressed="false">🔊 Sound</button>
+<button id="fsBtn" class="fs-btn">⛶ Fullscreen</button>
 
 <!-- Overlays -->
 <div class="overlay">
-  <div id="startCard" class="card" role="button" aria-label="Start game">
-    <h1 id="startTitle">Tap to Start</h1>
-    <p id="startSub">Tap again to flap • Best is saved</p>
-    <p id="fsHint" style="margin-top:10px; font-size:13px; opacity:.95; display:none; color:#ff4d4f">💡 Tip: For the best experience, use the ⛶ Fullscreen button.</p>
+  <div id="startCard" class="card">
+    <h1>Tap to Start</h1>
+    <p>Tap again to flap • Best is saved</p>
   </div>
 
   <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
     <h1>Game Over</h1>
     <p id="finalScoreP">Score: 0 • Best: 0</p>
-    <p id="fsHintOver" style="margin-top:10px; font-size:13px; opacity:.95; display:none; color:#ff4d4f">💡 Tip: For the best experience, use the ⛶ Fullscreen button.</p>
-    <p style="opacity:.85;font-size:12px;margin-top:8px">Tap <b>outside</b> this window to restart (after 1s)</p>
-
-    <img id="sysImg" alt="System image" />
-    <div id="sysInfoBox" style="margin-top:12px; text-align:left; display:none">
-      <div style="font-weight:800; font-size:16px; margin-bottom:6px">System: <span id="sysTitle">—</span></div>
-      <div id="sysBlurb" style="opacity:.9; font-size:13px; margin-bottom:8px">—</div>
-      <div id="sysSpecsBox" style="margin-top:10px; display:none">
-        <table id="sysSpecs" style="width:100%; border-collapse:collapse; font-size:13px"></table>
-      </div>
-      <div id="sysLinks" style="margin-top:8px; font-size:13px"></div>
-    </div>
+    <p style="opacity:.85;font-size:12px;margin-top:8px">Tap outside to restart (after 1s)</p>
   </div>
 </div>
 
-<!-- Landscape-only blocker -->
 <div id="rotBlock" class="rot-overlay">
-  <div class="rot-box">
-    <h2>Rotate your device</h2>
-    <p>This game is landscape-only. Turn your device to play.</p>
-  </div>
+  <div class="rot-box"><h2>Rotate your device</h2><p>This game is landscape-only.</p></div>
 </div>
 
-<!-- Loading overlay (prevents first-frame flash) -->
-<div id="loadingOverlay"><div id="loadingBox">Loading…</div></div>
+<div id="loadingOverlay">Loading…</div>
 
 <script>
-(function () {
-  const VERSION = '1.50-beta';
-  const ua = navigator.userAgent;
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
-  const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
-
-  // World (logic) size — never changes
-  const WORLD_W = 1920, WORLD_H = 1080;
-
-  // Mobile performance: render at lower backbuffer, scale up
-  let backW = WORLD_W, backH = WORLD_H;
-  if (isMobile) { backW = 1280; backH = 720; }
-
-  const SPEED_MULT = isMobile ? 1.40 : 1.50;
-
-  const G_PPS2         = 4800 * SPEED_MULT;
-  const LIFT_V0        = -1350 * SPEED_MULT;
-  const MAX_FALL_PPS   = 2200 * SPEED_MULT;
-  const PIPE_SPEED_PPS = 480  * SPEED_MULT;
-  const PIPE_W         = 180;
-  const GAP_MIN        = 310, GAP_MAX = 450;
-  const PIPE_SPAWN_EVERY_S = 1.8;
-
-  const BIRD_INSET = 8;
-
-  /* Spacing rules */
-  const SWITCH_MIN_GAP_X = WORLD_W * 0.5;  // when switching H <-> V
-  const HSEQ_SPACING     = WORLD_W * 0.25; // between consecutive horizontals
-  const HSEQ_COUNT       = 3;
-  const BEGIN_WITH_HSEQ  = true;
-
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d', { alpha:false });
-  ctx.imageSmoothingEnabled = true;
-
-  function applyBackbuffer(){
-    canvas.width = backW;
-    canvas.height = backH;
-    ctx.setTransform(backW / WORLD_W, 0, 0, backH / WORLD_H, 0, 0);
-  }
-  applyBackbuffer();
-
-  /* ===== Fit & Orientation ===== */
-  function fitCanvas() {
-    const vw = window.innerWidth;
-    const vh = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
-    const scale = Math.min(vw / WORLD_W, vh / WORLD_H);
-    canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
-  }
-  function safeFit() {
-    window.scrollTo(0,0);
-    fitCanvas(); requestAnimationFrame(fitCanvas);
-    setTimeout(fitCanvas, 250); setTimeout(fitCanvas, 600);
-  }
-  const rotBlock = document.getElementById('rotBlock');
-  let landscapeOK = true;
-  function checkOrientation(){
-    const isLandscape = window.innerWidth >= window.innerHeight;
-    landscapeOK = isLandscape;
-    rotBlock.classList.toggle('show', !isLandscape);
-    safeFit();
-  }
-  window.addEventListener('resize', checkOrientation);
-  window.addEventListener('orientationchange', checkOrientation);
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', checkOrientation);
-
-  /* ===== HUD + overlays ===== */
-  const scoreEl = document.getElementById('scoreVal');
-  const lastEl  = document.getElementById('lastVal');
-  const bestEl  = document.getElementById('bestVal');
-  const startCard   = document.getElementById('startCard');
-  const gameOverCard= document.getElementById('gameOverCard');
-  const finalScoreP = document.getElementById('finalScoreP');
-  const fsBtn = document.getElementById('fsBtn');
-  const fsHintStart= document.getElementById('fsHint');
-  const fsHintOver = document.getElementById('fsHintOver');
-  const iosFsHint = document.getElementById('iosFsHint');
-
-  function fsEnabled(){
-    return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled || document.msFullscreenEnabled);
-  }
-  function inFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
-  function updateFsBtn(){
-    const full = !!inFullscreen();
-    fsBtn.textContent = full ? "⤢ Exit" : "⛶ Fullscreen";
-    fsBtn.title = full ? "Exit fullscreen" : "Enter fullscreen";
-    fsHintStart.style.display = (full || !fsEnabled()) ? 'none' : 'block';
-    fsHintOver.style.display  = (full || !fsEnabled()) ? 'none' : 'block';
-  }
-  if (!fsEnabled() || (isiOS && !document.documentElement.requestFullscreen)) {
-    fsBtn.style.display = 'none'; iosFsHint.style.display = 'block';
-  } else { iosFsHint.style.display = 'none'; }
-  fsBtn.addEventListener('click', async (e)=>{
-    e.stopPropagation();
-    const el = document.documentElement;
-    try{
-      if(!inFullscreen()){
-        if (el.requestFullscreen) await el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
-        else if (el.msRequestFullscreen) await el.msRequestFullscreen();
-      } else {
-        if (document.exitFullscreen) await document.exitFullscreen();
-        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
-        else if (document.msExitFullscreen) await document.msExitFullscreen();
-      }
-    }catch(_){}
-    updateFsBtn();
-  }, {passive:false});
-  ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
-
-  /* ===== Game state ===== */
-  let started=false, over=false, restartLocked=false;
-  let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0);
-  bestEl.textContent = best;
-  let spawnTimer = 0;
-
-  /* ===== Audio ===== */
-  let audioCtx = null, masterGain = null;
-  let muted = false, audioReady = false;
-  function setMuted(m){ muted = m; if (masterGain) masterGain.gain.value = muted ? 0 : 1;
-    const btn = document.getElementById('muteBtn'); btn.textContent = muted ? "🔇 Muted" : "🔊 Sound"; btn.setAttribute("aria-pressed", String(muted)); }
-  document.getElementById('muteBtn').addEventListener('click', (e)=>{ e.stopPropagation(); setMuted(!muted); });
-  async function initAudioOnce(){
-    if (audioReady) return;
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint:"interactive" });
-    masterGain = audioCtx.createGain(); masterGain.gain.value = muted ? 0 : 0.8; masterGain.connect(audioCtx.destination);
-    try { await audioCtx.resume(); } catch(e){}
-    audioReady = true;
-  }
-  function envGain(duration=0.25, attack=0.005, volume=1){
-    const g = audioCtx.createGain(); const now = audioCtx.currentTime;
-    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(volume, now + attack); g.gain.exponentialRampToValueAtTime(0.0001, now + duration); return g;
-  }
-  function woosh(dur=0.25){
-    if(!audioReady || muted) return;
-    const bufferSize = Math.max(1, audioCtx.sampleRate * dur);
-    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2 - 1) * 0.3;
-    const noise = audioCtx.createBufferSource(); noise.buffer = buffer;
-    const filter = audioCtx.createBiquadFilter(); filter.type = "lowpass"; filter.frequency.value = 1200;
-    const g = envGain(dur, 0.01, 0.4);
-    noise.connect(filter); filter.connect(g); g.connect(masterGain);
-    noise.start(); noise.stop(audioCtx.currentTime + dur + 0.05);
-  }
-  function oceanWave(dur=1.6){
-    if(!audioReady || muted) return;
-    const bufferSize = Math.max(1, audioCtx.sampleRate * dur);
-    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-    const data = buffer.getChannelData(0);
-    let b0=0, b1=0, b2=0;
-    for (let i=0;i<bufferSize;i++){ const white = Math.random()*2 - 1;
-      b0 = 0.997*b0 + white*0.030; b1 = 0.985*b1 + white*0.045; b2 = 0.950*b2 + white*0.070;
-      data[i] = (b0+b1+b2)*0.6; }
-    const src = audioCtx.createBufferSource(); src.buffer = buffer;
-    const lp = audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value = 800;
-    const lfo = audioCtx.createOscillator(); lfo.type="sine"; lfo.frequency.value = 0.25;
-    const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 220;
-    lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
-    const g = audioCtx.createGain(); const now = audioCtx.currentTime;
-    g.gain.setValueAtTime(0.0, now); g.gain.linearRampToValueAtTime(0.35, now + 0.18); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    src.connect(lp); lp.connect(g); g.connect(masterGain);
-    src.start(); lfo.start(); const stopAt = now + dur + 0.05; src.stop(stopAt); lfo.stop(stopAt);
-  }
-  const playFlap = () => woosh(0.25);
-
-  function loadImageWithTimeout(src, timeoutMs=6000){
-    return new Promise((resolve) => {
-      if(!src){ resolve(null); return; }
-      const img = new Image(); img.referrerPolicy = 'no-referrer';
-      let done = false;
-      const finish = (val)=>{ if(done) return; done = true; resolve(val || null); };
-      const timer = setTimeout(()=>finish(null), timeoutMs);
-      img.onload = ()=>{ clearTimeout(timer); finish(img); };
-      img.onerror = ()=>{ clearTimeout(timer); finish(null); };
-      img.src = src;
-    });
-  }
-
-  /* ===== Procedural fallbacks ===== */
-  function makeCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
-  function buildFallbackBG(){
-    const c = makeCanvas(1920,1080); const g = c.getContext('2d');
-    const grad = g.createLinearGradient(0,0,0,1080);
-    grad.addColorStop(0,'#7ed0ff'); grad.addColorStop(1,'#d9f4ff');
-    g.fillStyle = grad; g.fillRect(0,0,1920,1080);
-    g.globalAlpha=0.35; g.fillStyle='#fff'; g.beginPath(); g.arc(1600,220,160,0,Math.PI*2); g.fill(); g.globalAlpha=1;
-    return c;
-  }
-  function buildFallbackBird(){
-    const c = makeCanvas(256,256); const g = c.getContext('2d'); g.translate(128,128);
-    const bodyGrad = g.createRadialGradient(0,-20,20,0,0,120);
-    bodyGrad.addColorStop(0,'#ffec77'); bodyGrad.addColorStop(1,'#f5b91a');
-    g.fillStyle = bodyGrad; g.beginPath(); g.arc(0,0,90,0,Math.PI*2); g.fill();
-    g.fillStyle='rgba(255,255,255,0.65)'; g.beginPath(); g.ellipse(-20,10,35,25,-0.4,0,Math.PI*2); g.fill();
-    g.fillStyle='#fff'; g.beginPath(); g.arc(30,-20,16,0,Math.PI*2); g.fill();
-    g.fillStyle='#222'; g.beginPath(); g.arc(34,-18,7,0,Math.PI*2); g.fill();
-    g.fillStyle='#ff7f2a'; g.beginPath(); g.moveTo(90,-6); g.lineTo(130,10); g.lineTo(90,26); g.closePath(); g.fill();
-    return c;
-  }
-
-  /* ===== Asset builders: FULL bottom PNG for horizontals ===== */
-  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
-  function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
-    if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph, full:ph }; }
-    const scale = drawW / (img.naturalWidth || img.width);
-    const scaledH = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
-    const capH    = Math.max(1, Math.round(capPxSrc * scale));
-    const full = makeScaledCanvas(img, drawW, scaledH);
-    const cap  = document.createElement("canvas");
-    const body = document.createElement("canvas");
-    cap.width = drawW; cap.height = Math.min(capH, scaledH);
-    body.width = drawW; body.height = Math.max(1, scaledH - cap.height);
-    const cg = cap.getContext("2d"), bg = body.getContext("2d");
-    cg.imageSmoothingEnabled = bg.imageSmoothingEnabled = true;
-    if (capFrom === "top") {
-      cg.drawImage(full, 0, 0, drawW, cap.height, 0, 0, drawW, cap.height);
-      bg.drawImage(full, 0, cap.height, drawW, body.height, 0, 0, drawW, body.height);
-    } else {
-      cg.drawImage(full, 0, scaledH - cap.height, drawW, cap.height, 0, 0, drawW, cap.height);
-      bg.drawImage(full, 0, 0, drawW, body.height, 0, 0, drawW, body.height);
-    }
-    return { cap, body, full };
-  }
-  function rotateCCW90(src){
-    const c = document.createElement('canvas');
-    c.width = src.height; c.height = src.width;
-    const g = c.getContext('2d');
-    g.imageSmoothingEnabled = true;
-    g.translate(0, c.height);
-    g.rotate(-Math.PI/2);
-    g.drawImage(src, 0, 0);
-    return c;
-  }
-
-  /* ===== Pipe styles (SINGLE declaration — fixed) ===== */
-  const PIPE_STYLES_CFG = [
-    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
-  ];
-
-  const Raw={ bottoms:[], tops:[] };
-  const Styles=[];
-
-  function rebuildStyles(){
-    Styles.length=0;
-    for(let i=0;i<PIPE_STYLES_CFG.length;i++){
-      const cfg=PIPE_STYLES_CFG[i];
-      const bot=Raw.bottoms[i], top=Raw.tops[i];
-      const drawW = Math.round(PIPE_W * (cfg.scale || 1));
-      const bottom = buildCapBodyPx(bot, drawW, cfg.bottom.capPx, cfg.bottom.capFrom);
-      const topset = buildCapBodyPx(top, drawW, cfg.top.capPx,   cfg.top.capFrom);
-      const fullBottomRotated = rotateCCW90(bottom.full); // full image only
-      Styles.push({ name:cfg.name, drawW, bottom, top:topset, hbar:{ tile: fullBottomRotated, thickness: drawW } });
-    }
-  }
-
-  /* ===== Obstacles & spacing helpers ===== */
-  const obstacles = []; // {type:'vpipe'|'hbar', ...}
-
-  function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
-  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-
-  function rightmostEndOf(type){
-    let end = -Infinity;
-    for (const o of obstacles){
-      if (o.type !== type) continue;
-      const ext = (o.type==='vpipe') ? o.w : o.length;
-      end = Math.max(end, o.x + ext);
-    }
-    return end;
-  }
-
-  function spawnVPipe(forceX=null){
-    if(!Styles.length) return;
-    const margin = Math.round(WORLD_H * 0.10);
-    const maxSection = Math.round(WORLD_H * 0.45);
-    const minGapRequired = WORLD_H - 2*maxSection - 2*margin;
-    const minGap = Math.max(GAP_MIN, Math.min(GAP_MAX, Math.max(0, Math.floor(minGapRequired))));
-    const gap = randInt(minGap, GAP_MAX);
-
-    let top = randInt(margin, WORLD_H - gap - margin);
-    if (top > maxSection) top = maxSection;
-    let bottomH = WORLD_H - (top + gap);
-    if (bottomH > maxSection) top = WORLD_H - gap - maxSection;
-    top = clamp(top, margin, WORLD_H - gap - margin);
-
-    const styleIndex = Math.floor(Math.random()*Styles.length);
-
-    let x = (forceX!=null) ? forceX : WORLD_W;
-
-    // spacing vs right-most horizontal
-    const rightH = rightmostEndOf('hbar');
-    if (isFinite(rightH)) x = Math.max(x, rightH + SWITCH_MIN_GAP_X);
-
-    // also avoid overlapping the last vertical
-    const rightV = rightmostEndOf('vpipe');
-    if (isFinite(rightV)) x = Math.max(x, rightV + 0);
-
-    obstacles.push({ type:'vpipe', x, prevX:x, top, gap, w:Styles[styleIndex].drawW, styleIndex, scored:false });
-  }
-
-  function spawnHBar(forceX=null, yTop=null){
-    const styleIndex = Math.floor(Math.random()*Styles.length);
-    const sty = Styles[styleIndex];
-    const tile = sty.hbar.tile;
-    const thickness = sty.hbar.thickness;
-
-    const marginY = Math.round(WORLD_H * 0.15);
-    let y = (yTop!=null) ? yTop : randInt(marginY, WORLD_H - marginY - thickness);
-
-    // length by whole tiles
-    const targetLen = Math.round(WORLD_W * 0.68);
-    const tilesNeeded = Math.max(2, Math.floor(targetLen / tile.width));
-    const length = tilesNeeded * tile.width;
-
-    let x = (forceX!=null) ? forceX : WORLD_W;
-
-    // spacing vs right-most vertical when switching types
-    const rightV = rightmostEndOf('vpipe');
-    if (isFinite(rightV)) x = Math.max(x, rightV + SWITCH_MIN_GAP_X);
-
-    // spacing vs right-most horizontal (never stack)
-    const rightH = rightmostEndOf('hbar');
-    if (isFinite(rightH)) x = Math.max(x, rightH + HSEQ_SPACING);
-
-    obstacles.push({ type:'hbar', x, prevX:x, y, length, styleIndex, thickness, tileWidth: tile.width, scored:false });
-  }
-
-  // Start with 3 horizontals laid strictly one after another
-  function spawnStartHorizontalSequence(){
-    if(!Styles.length) return;
-    const styIdx = Math.floor(Math.random()*Styles.length);
-    const sty = Styles[styIdx];
-    const tile = sty.hbar.tile;
-    const thickness = sty.hbar.thickness;
-
-    const tilesNeeded = Math.max(2, Math.floor((WORLD_W*0.6) / tile.width));
-    const length = tilesNeeded * tile.width;
-
-    const marginY = Math.round(WORLD_H * 0.15);
-    const maxStep = Math.round(WORLD_H * 0.18);
-    let y = randInt(marginY, WORLD_H - marginY - thickness);
-
-    // first bar
-    let x = WORLD_W + 120;
-    obstacles.push({ type:'hbar', x, prevX:x, y, length, styleIndex:styIdx, thickness, tileWidth:tile.width, scored:false });
-
-    // subsequent bars: after previous end + spacing
-    for (let i=1;i<HSEQ_COUNT;i++){
-      const prevEnd = x + length;
-      x = prevEnd + HSEQ_SPACING;
-      const minY = clamp(y - maxStep, marginY, WORLD_H - marginY - thickness);
-      const maxY = clamp(y + maxStep, marginY, WORLD_H - marginY - thickness);
-      y = randInt(minY, maxY);
-      obstacles.push({ type:'hbar', x, prevX:x, y, length, styleIndex:styIdx, thickness, tileWidth:tile.width, scored:false });
-    }
-  }
-
-  // Spawner
-  let spawnCount = 0;
-  function spawnObstacle(){
-    if (BEGIN_WITH_HSEQ && spawnCount===0){
-      spawnStartHorizontalSequence();
-      spawnCount = HSEQ_COUNT;
-      return;
-    }
-    const nextType = (Math.random()<0.25) ? 'hbar' : 'vpipe';
-    if (nextType === 'hbar') spawnHBar();
-    else spawnVPipe();
-    spawnCount++;
-  }
-
-  function physicsStep(dt){
-    spawnTimer += dt * SPEED_MULT;
-    while (spawnTimer >= PIPE_SPAWN_EVERY_S) {
-      spawnObstacle();
-      spawnTimer -= PIPE_SPAWN_EVERY_S;
-    }
-
-    for(const o of obstacles){ o.x -= PIPE_SPEED_PPS * dt; }
-
-    bird.step(dt);
-
-    // Floor/ceiling
-    if(bird.y + (bird.h - BIRD_INSET) >= WORLD_H){ endGame(); }
-    if(bird.y + BIRD_INSET <= 0){ endGame(); }
-
-    // Bird AABB
-    const bx1 = bird.x + BIRD_INSET;
-    const bx2 = bird.x + bird.w - BIRD_INSET;
-    const by1 = bird.y + BIRD_INSET;
-    const by2 = bird.y + bird.h - BIRD_INSET;
-
-    for(const o of obstacles){
-      if (o.type === 'vpipe'){
-        const overlapX = (bx2 > o.x) && (bx1 < o.x + o.w);
-        if (overlapX) {
-          const safeTop = o.top;
-          const safeBottom = o.top + o.gap;
-          const hitsTop = by1 < safeTop;
-          const hitsBottom = by2 > safeBottom;
-          if (hitsTop || hitsBottom) { endGame(); break; }
-        }
-        if(!o.scored && (o.x+o.w) < bx1){
-          o.scored = true; score++; scoreEl.textContent = score;
-          if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
-        }
-      } else if (o.type === 'hbar'){
-        const right = o.x + o.length;
-        const overlapX = (bx2 > o.x) && (bx1 < right);
-        const overlapY = (by2 > o.y) && (by1 < o.y + o.thickness);
-        if (overlapX && overlapY){ endGame(); break; }
-        if(!o.scored && right < bx1){
-          o.scored = true; score++; scoreEl.textContent = score;
-          if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
-        }
-      }
-    }
-
-    // Remove offscreen
-    for(let i=obstacles.length-1;i>=0;i--){
-      const o = obstacles[i];
-      const ext = (o.type==='vpipe') ? o.w : o.length;
-      if (o.x + ext <= 0) obstacles.splice(i,1);
-    }
-  }
-
-  // Bird (with prev-state for interpolation)
-  const bird={
-    x:Math.round(WORLD_W*0.167),
-    y:Math.round(WORLD_H*0.5),
-    w:Math.round(WORLD_H*0.069),
-    h:Math.round(WORLD_H*0.069),
-    v:0,
-    prevY:0,
-    draw(alpha){
-      const yLerp = this.prevY + (this.y - this.prevY) * alpha;
-      const ySnap = Math.round(yLerp);
-      ctx.save();
-      const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
-      ctx.translate(this.x+this.w/2,ySnap+this.h/2);
-      ctx.rotate(a);
-      if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
-      else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
-      ctx.restore();
-    },
-    step(dt){
-      this.v += G_PPS2 * dt;
-      if (this.v > MAX_FALL_PPS) this.v = MAX_FALL_PPS;
-      this.y += this.v * dt;
-    },
-    flap(){ this.v = LIFT_V0; woosh(0.25); },
-    reset(){ this.y=Math.round(WORLD_H*0.5); this.prevY=this.y; this.v=0; }
-  };
-
-  function drawBackground(){
-    if(bgImg) ctx.drawImage(bgImg,0,0,WORLD_W,WORLD_H);
-    else { ctx.fillStyle="#1e1e1e"; ctx.fillRect(0,0,WORLD_W,WORLD_H); }
-  }
-
-  /* Drawing helpers */
-  function drawBodyTiled(x,yStart,totalH,tile,mode,w){
-    const th=tile.height; if(totalH<=0||th<=0) return;
-    if(mode==="topUp"){
-      let y=totalH-th;
-      while(y>=0){ ctx.drawImage(tile,x,y,w,th); y-=th; }
-      const rem=totalH%th; if(rem>0) ctx.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem);
-    } else {
-      let y=yStart, end=yStart+totalH;
-      while(y+th<=end){ ctx.drawImage(tile,x,y,w,th); y+=th; }
-      const left=end-y; if(left>0) ctx.drawImage(tile,0,0,tile.width,left,x,y,w,left);
-    }
-  }
-
-  function drawVPipes(alpha){
-    obstacles.forEach(o=>{
-      if (o.type !== 'vpipe') return;
-      const sty = Styles[o.styleIndex]; if(!sty) return;
-      const w = o.w;
-      const interpX = o.prevX + (o.x - o.prevX) * alpha;
-      const renderX = Math.round(interpX);
-
-      const topH = o.top;
-      if(topH>0){
-        const cap = sty.top.cap, body = sty.top.body;
-        const capH = Math.min(cap.height, topH), bodyH = topH - capH;
-        if(bodyH>0) drawBodyTiled(renderX, 0, bodyH, body, "topUp", w);
-        ctx.drawImage(cap, renderX, topH - capH, w, capH);
-      }
-
-      const by = o.top + o.gap;
-      const bottomH = WORLD_H - by;
-      if(bottomH>0){
-        const cap = sty.bottom.cap, body = sty.bottom.body;
-        const capH = Math.min(cap.height, bottomH);
-        ctx.drawImage(cap, renderX, by, w, capH);
-        const remain = bottomH - capH;
-        if(remain>0) drawBodyTiled(renderX, by + capH, remain, body, "bottomDown", w);
-      }
-    });
-  }
-
-  function drawHBar(alpha){
-    obstacles.forEach(o=>{
-      if (o.type !== 'hbar') return;
-      const sty = Styles[o.styleIndex]; if(!sty) return;
-      const tile = sty.hbar.tile;
-      const H = sty.hbar.thickness;
-
-      const interpX = o.prevX + (o.x - o.prevX) * alpha;
-      const renderX = Math.round(interpX);
-
-      const tiles = Math.max(1, Math.floor(o.length / tile.width));
-      let x = renderX;
-      for(let i=0;i<tiles;i++){
-        ctx.drawImage(tile, x, o.y, tile.width, H);
-        x += tile.width;
-      }
-    });
-  }
-
-  /* ===== Fixed-step + interpolation ===== */
-  const FIXED_HZ = isMobile ? 120 : 240;
-  const FIXED_DT = 1 / FIXED_HZ;
-  const MAX_FRAME_DT = 0.1;
-  let accumulator = 0;
-  let lastTs = performance.now();
-
-  function beforeStepCopyPrev(){
-    bird.prevY = bird.y;
-    for (const o of obstacles) o.prevX = o.x;
-  }
-  function loop(ts){
-    let frameDt = (ts - lastTs) / 1000;
-    if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT;
-    if (frameDt < 0) frameDt = 0;
-    lastTs = ts;
-
-    accumulator += frameDt;
-
-    while (accumulator >= FIXED_DT) {
-      beforeStepCopyPrev();
-      if(started && !over){
-        physicsStep(FIXED_DT);
-      }
-      accumulator -= FIXED_DT;
-    }
-
-    const alpha = accumulator / FIXED_DT;
-
-    ctx.clearRect(0,0,WORLD_W,WORLD_H);
-    drawBackground();
-    drawVPipes(alpha);
-    drawHBar(alpha);
-    bird.draw(alpha);
-
-    /* Version label bottom-left — BLACK and “beta” */
-    ctx.fillStyle='#000';
-    ctx.font='700 16px Montserrat,system-ui';
-    ctx.fillText('v'+VERSION, 14, WORLD_H-16);
-    ctx.font='600 12px Montserrat,system-ui';
-    ctx.fillText('beta', 14, WORLD_H-2);
-
-    requestAnimationFrame(loop);
-  }
-
-  /* ===== Flow ===== */
-  function startGame(){
-    started=true; over=false; restartLocked=false; spawnTimer=0;
-    spawnCount = 0;
-    lastScore = score; lastEl.textContent = lastScore;
-    score = 0; scoreEl.textContent = "0";
-    obstacles.length = 0; bird.reset();
-    startCard.classList.add('hidden');
-    gameOverCard.classList.add('hidden');
-  }
-  function endGame(){
-    if(over) return;
-    over=true;
-    finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
-    gameOverCard.classList.remove('hidden');
-    gameOverCard.scrollTop = 0;
-    updateFsBtn();
-    restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
-  }
-  function forceToStartScreen(){
-    started=false; over=false; restartLocked=false;
-    ctx.clearRect(0,0,WORLD_W,WORLD_H);
-    drawBackground();
-    bird.reset(); bird.draw(0);
-    startCard.classList.remove('hidden');
-    gameOverCard.classList.add('hidden');
-    updateFsBtn();
-  }
-
-  /* ===== INPUT ===== */
-  let lastTap=0;
-  startCard.addEventListener('click', handleTap, {passive:false});
-  startCard.addEventListener('touchstart', (e)=>{ handleTap(e); }, {passive:false});
-  async function handleTap(e){
-    if(e){ try{ e.preventDefault(); e.stopPropagation(); }catch(_){ } }
-    try { await initAudioOnce(); try { await audioCtx.resume(); } catch(_){} setMuted(muted); } catch(_){}
-    const now = performance.now(); if (now - lastTap < 140) return; lastTap = now;
-    if(!started){ startGame(); bird.flap(); return; }
-    if(!over){ bird.flap(); return; }
-    if(!restartLocked) startGame();
-  }
-  function docTapGate(e){
-    if (!started && !startCard.classList.contains('hidden')) { handleTap(e); return; }
-    if (!gameOverCard.classList.contains('hidden')) {
-      if (e.target.closest('#gameOverCard')) return;
-      if (e.target.closest('#muteBtn, #fsBtn')) return;
-      handleTap(e); return;
-    }
-    if (!e.target.closest('#muteBtn, #fsBtn')) handleTap(e);
-  }
-  document.addEventListener('pointerdown', docTapGate, {passive:false, capture:true});
-  document.addEventListener('touchstart', docTapGate, {passive:false, capture:true});
-  document.addEventListener('click', docTapGate, {passive:false, capture:true});
-
-  /* ===== Boot (gated, with hard failsafe) ===== */
-  const BG_URL   = "assets/bg.png";
-  const BIRD_URL = "assets/bird.png";
-  let bgImg = null, birdImg = null;
-
-  const loadingEl = document.getElementById('loadingOverlay');
-  const hideLoading = ()=>{ if (loadingEl) loadingEl.style.display = 'none'; };
-  setTimeout(hideLoading, 1200); // hard failsafe even if something slows down
-
-  async function gatedBoot(){
-    try {
-      const [bg, bird] = await Promise.all([ loadImageWithTimeout(BG_URL), loadImageWithTimeout(BIRD_URL) ]);
-      bgImg   = bg   || buildFallbackBG();
-      birdImg = bird || buildFallbackBird();
-
-      forceToStartScreen();
-      checkOrientation();
-      lastTs = performance.now();
-      requestAnimationFrame(loop);
-
-      // Preload pipes (non-blocking)
-      const promises = [];
-      for (const s of PIPE_STYLES_CFG){
-        promises.push(loadImageWithTimeout(s.bottom.url));
-        promises.push(loadImageWithTimeout(s.top.url));
-      }
-      const results = await Promise.allSettled(promises);
-      const bottoms=[], tops=[];
-      for(let i=0;i<PIPE_STYLES_CFG.length;i++){
-        bottoms[i] = results[i*2]?.value || null;
-        tops[i]    = results[i*2+1]?.value || null;
-      }
-      Raw.bottoms = bottoms; Raw.tops = tops;
-      rebuildStyles();
-
-    } catch (_){
-      // Absolute fallback
-      bgImg   = buildFallbackBG();
-      birdImg = buildFallbackBird();
-      forceToStartScreen();
-      checkOrientation();
-      lastTs = performance.now();
-      requestAnimationFrame(loop);
-    } finally {
-      hideLoading();
-    }
-  }
-
-  window.addEventListener('error', hideLoading, {passive:true});
-  window.addEventListener('unhandledrejection', hideLoading, {passive:true});
-  gatedBoot();
-
-})(); // end IIFE
+(() => {
+  const VERSION = '1.51-beta';
+  const WORLD_W=1920, WORLD_H=1080;
+  const SPEED_MULT = 1.5;
+  const G=4800*SPEED_MULT, LIFT=-1350*SPEED_MULT, MAX_FALL=2200*SPEED_MULT, PIPE_SPEED=480*SPEED_MULT;
+  const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
+  const SWITCH_MIN_GAP_X = WORLD_W*0.5, HSEQ_SPACING=WORLD_W*0.25;
+
+  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d',{alpha:false});
+  let bgImg=null, birdImg=null;
+
+  const obstacles=[];
+  const bird={x:WORLD_W*0.167,y:WORLD_H*0.5,w:75,h:75,v:0,draw(){ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.rotate(this.v/2000);ctx.drawImage(birdImg||this.fallback,-this.w/2,-this.h/2,this.w,this.h);ctx.restore();},step(dt){this.v+=G*dt;this.v=Math.min(this.v,MAX_FALL);this.y+=this.v*dt;},flap(){this.v=LIFT;},reset(){this.y=WORLD_H/2;this.v=0;},fallback:(()=>{const c=document.createElement('canvas');c.width=64;c.height=64;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,64,64);return c;})()};
+
+  function spawnVPipe(){const gap=Math.random()*(GAP_MAX-GAP_MIN)+GAP_MIN;const top=Math.random()*(WORLD_H-gap-200)+100;obstacles.push({type:'v',x:WORLD_W,w:PIPE_W,top, gap,scored:false});}
+  function spawnHBar(startX){const length=WORLD_W*0.6;const y=Math.random()*(WORLD_H-300)+150;obstacles.push({type:'h',x:startX||WORLD_W,y,length,h:PIPE_W,scored:false});}
+
+  function drawBG(){ctx.fillStyle='#d9f4ff';ctx.fillRect(0,0,WORLD_W,WORLD_H);}
+  function drawObs(){for(const o of obstacles){if(o.type==='v'){ctx.fillStyle='#2e8b57';ctx.fillRect(o.x,0,o.w,o.top);ctx.fillRect(o.x,o.top+o.gap,o.w,WORLD_H-(o.top+o.gap));}else{ctx.fillStyle='#8b5e3c';ctx.fillRect(o.x,o.y,o.length,o.h);}}}
+
+  let score=0,last=0,best=0,started=false,over=false;
+  function startGame(){score=0;obstacles.length=0;bird.reset();spawnHBar(WORLD_W+200);spawnHBar(WORLD_W+200+HSEQ_SPACING);spawnHBar(WORLD_W+200+HSEQ_SPACING*2);started=true;over=false;}
+  function endGame(){over=true;document.getElementById('finalScoreP').textContent=`Score: ${score} • Best: ${best}`;document.getElementById('gameOverCard').classList.remove('hidden');}
+  document.getElementById('startCard').onclick=()=>{if(!started){startGame();bird.flap();}else if(!over){bird.flap();}};
+  document.addEventListener('keydown',()=>{if(!started){startGame();bird.flap();}else if(!over){bird.flap();}});
+
+  let lastTs=performance.now();
+  function loop(ts){const dt=(ts-lastTs)/1000;lastTs=ts;if(started&&!over){for(const o of obstacles){o.x-=PIPE_SPEED*dt;if(o.type==='v'&&!o.scored&&o.x+o.w<bird.x){score++;o.scored=true;best=Math.max(best,score);}if(o.type==='h'&&!o.scored&&o.x+o.length<bird.x){score++;o.scored=true;best=Math.max(best,score);}}bird.step(dt);if(bird.y>WORLD_H)endGame();}
+    ctx.clearRect(0,0,WORLD_W,WORLD_H);drawBG();drawObs();bird.draw();
+    ctx.fillStyle='#000';ctx.font='700 16px Montserrat';ctx.fillText('v'+VERSION,14,WORLD_H-14);
+    requestAnimationFrame(loop);}
+  bgImg=null;birdImg=null;document.getElementById('loadingOverlay').style.display='none';requestAnimationFrame(loop);
+})();
 </script>
-
 </body>
 </html>
