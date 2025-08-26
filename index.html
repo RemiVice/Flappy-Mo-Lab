@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.54-beta)</title>
+<title>Flappy Mo — Local Assets (v1.42-stable)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,14 +11,13 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* One true canvas size (world space) — draw at 1920×1080, only scale via CSS transform */
+  /* Fixed world canvas (1920x1080). Only CSS scale changes. */
   #game{
     position:fixed; top:50%; left:50%;
-    width:1920px; height:1080px;                 /* CSS box; DO NOT change via JS */
-    transform:translate(-50%, -50%) scale(1);    /* JS updates scale() only */
+    width:1920px; height:1080px;
+    transform:translate(-50%, -50%) scale(1);
     transform-origin:center center;
-    background:#000; touch-action:none;
-    image-rendering:auto;
+    background:#000; touch-action:none; image-rendering:auto;
     border-radius:14px; border:1px solid rgba(255,255,255,.08);
     box-shadow:0 18px 50px rgba(0,0,0,.45);
   }
@@ -37,10 +36,25 @@
   .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
   .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
 
+  .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:999 }
+  .rot-overlay.show{ display:flex }
+  .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
+
+  .mute-btn, .fs-btn{ position:fixed; z-index:13; pointer-events:auto; background:var(--glass); color:#fff; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
+  .mute-btn{ right:12px; top:12px; }
+  .fs-btn{ right:12px; bottom:12px; }
+
+  #iosFsHint{ position:fixed; right:12px; bottom:12px; z-index:12; color:#fff; font-size:12px; background:var(--glass); border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; display:none; }
+
+  /* Loading overlay */
   #loadingOverlay{
     position:fixed; inset:0; display:grid; place-items:center;
     background:#0b0d10; color:#fff; z-index:2000;
-    font-weight:800; font-size:18px;
+    font-weight:800; font-size:18px; letter-spacing:.3px;
+  }
+  #loadingBox{
+    background:rgba(20,24,28,.85); border:1px solid rgba(255,255,255,.12);
+    border-radius:14px; padding:16px 20px; box-shadow:0 10px 30px rgba(0,0,0,.5);
   }
 </style>
 </head>
@@ -48,204 +62,385 @@
 
 <canvas id="game" width="1920" height="1080"></canvas>
 
+<!-- HUD -->
 <div class="hud">
   <div class="badge">Score: <span id="scoreVal">0</span></div>
   <div class="badge">Last:  <span id="lastVal">0</span></div>
   <div class="badge">Best:  <span id="bestVal">0</span></div>
 </div>
+<button id="muteBtn" class="mute-btn" aria-pressed="false" title="Toggle sound">🔊 Sound</button>
+<button id="fsBtn" class="fs-btn" title="Fullscreen">⛶ Fullscreen</button>
+<div id="iosFsHint">Tip: On iPhone, use “Add to Home Screen” for true fullscreen.</div>
 
+<!-- Overlays -->
 <div class="overlay">
-  <div id="startCard" class="card">
+  <div id="startCard" class="card" role="button" aria-label="Start game">
     <h1 style="margin:0 0 8px">Tap to Start</h1>
     <p style="margin:0">Tap again to flap • Best is saved</p>
   </div>
+
   <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
     <h1 style="margin:0 0 8px">Game Over</h1>
     <p id="finalScoreP" style="margin:0">Score: 0 • Best: 0</p>
-    <p style="opacity:.85;font-size:12px;margin-top:8px">Tap outside to restart (after 1s)</p>
+    <p style="opacity:.85;font-size:12px;margin-top:8px">Tap <b>outside</b> this window to restart (after 1s)</p>
   </div>
 </div>
 
-<div id="loadingOverlay">Loading…</div>
+<!-- Landscape-only blocker -->
+<div id="rotBlock" class="rot-overlay">
+  <div class="rot-box">
+    <h2>Rotate your device</h2>
+    <p>This game is landscape-only. Turn your device to play.</p>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div id="loadingOverlay"><div id="loadingBox">Loading…</div></div>
 
 <script>
-(() => {
-  const VERSION='1.54-beta';
-  const W=1920, H=1080;
+(function () {
+  const VERSION = '1.42-stable';
+  const ua = navigator.userAgent;
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
+  const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
 
-  /* Fit: ONLY change CSS transform scale (no context scaling) */
-  const cv = document.getElementById('game');
-  function fit(){
+  // World size (logic/render) — never changes
+  const W = 1920, H = 1080;
+
+  /* Fit canvas by CSS scale only */
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  ctx.imageSmoothingEnabled = true;
+
+  function fitCanvas() {
     const vw = window.innerWidth;
     const vh = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
-    const s = Math.min(vw / W, vh / H);
-    cv.style.transform = `translate(-50%, -50%) scale(${s})`;
+    const scale = Math.min(vw / W, vh / H);
+    canvas.style.transform = `translate(-50%, -50%) scale(${scale})`;
   }
-  addEventListener('resize', fit);
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
-  fit();
-
-  const ctx = cv.getContext('2d', { alpha:false });
-  ctx.imageSmoothingEnabled = true;       // never touch ctx.scale or ctx.setTransform
-
-  /* Simple sky background (no stretching) */
-  const sky = (() => {
-    const c = document.createElement('canvas'); c.width=W; c.height=H;
-    const g = c.getContext('2d');
-    const grad = g.createLinearGradient(0,0,0,H);
-    grad.addColorStop(0,'#cfefff'); grad.addColorStop(1,'#dcf8ff');
-    g.fillStyle = grad; g.fillRect(0,0,W,H);
-    return c;
-  })();
-
-  /* Physics */
-  const SPEED=1.5, G=4800*SPEED, LIFT=-1350*SPEED, MAX_FALL=2200*SPEED, SCROLL=480*SPEED;
-  const PIPE_W=180;                    // on-screen thickness of horizontal bars
-  const HSEQ_SPACING = W*0.25;         // spacing between the 3 early horizontals
-
-  /* Load bottom pipe images and pre-rotate CCW 90° (front facing left) */
-  const BOTTOMS=[
-    "assets/pipe1-bottom.png","assets/pipe2-bottom.png","assets/pipe3-bottom.png","assets/pipe4-bottom.png",
-    "assets/pipe5-bottom.png","assets/pipe6-bottom.png","assets/pipe7-bottom.png","assets/pipe8-bottom.png"
-  ];
-  function load(src){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; }); }
-  function rotateCCW(img){
-    const c=document.createElement('canvas'); c.width=img.naturalHeight||img.height; c.height=img.naturalWidth||img.width;
-    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    g.translate(0,c.height); g.rotate(-Math.PI/2); g.drawImage(img,0,0);
-    return c;
+  function safeFit() {
+    window.scrollTo(0,0);
+    fitCanvas(); requestAnimationFrame(fitCanvas);
+    setTimeout(fitCanvas, 250); setTimeout(fitCanvas, 600);
   }
-  const tiles=[]; // rotated canvases
+  window.addEventListener('resize', safeFit);
+  window.addEventListener('orientationchange', safeFit);
+  window.visualViewport && window.visualViewport.addEventListener('resize', safeFit);
+  safeFit();
 
-  /* Bird (white square placeholder) */
-  const bird = {
-    x: Math.round(W*0.167),
-    y: Math.round(H*0.5),
-    w: Math.round(H*0.069),
-    h: Math.round(H*0.069),
-    v: 0,
-    draw(){ ctx.save(); ctx.translate(this.x+this.w/2,this.y+this.h/2); ctx.rotate(Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5))); ctx.fillStyle='#fff'; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); ctx.restore(); },
-    step(dt){ this.v += G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y += this.v*dt; },
-    flap(){ this.v = LIFT; },
-    reset(){ this.y = Math.round(H*0.5); this.v=0; }
+  /* Orientation gate */
+  const rotBlock = document.getElementById('rotBlock');
+  function checkOrientation(){
+    const isLandscape = window.innerWidth >= window.innerHeight;
+    rotBlock.classList.toggle('show', !isLandscape);
+  }
+  checkOrientation();
+
+  /* HUD + overlays */
+  const scoreEl = document.getElementById('scoreVal');
+  const lastEl  = document.getElementById('lastVal');
+  const bestEl  = document.getElementById('bestVal');
+  const startCard   = document.getElementById('startCard');
+  const gameOverCard= document.getElementById('gameOverCard');
+  const finalScoreP = document.getElementById('finalScoreP');
+  const fsBtn = document.getElementById('fsBtn');
+  const iosFsHint = document.getElementById('iosFsHint');
+
+  function fsEnabled(){
+    return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled || document.msFullscreenEnabled);
+  }
+  function inFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
+  function updateFsBtn(){
+    const full = !!inFullscreen();
+    fsBtn.textContent = full ? "⤢ Exit" : "⛶ Fullscreen";
+    fsBtn.title = full ? "Exit fullscreen" : "Enter fullscreen";
+  }
+  if (!fsEnabled() || (isiOS && !document.documentElement.requestFullscreen)) {
+    fsBtn.style.display = 'none'; iosFsHint.style.display = 'block';
+  } else { iosFsHint.style.display = 'none'; }
+  fsBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    const el = document.documentElement;
+    try{
+      if(!inFullscreen()){
+        if (el.requestFullscreen) await el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+        else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+      } else {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+        else if (document.msExitFullscreen) await document.msExitFullscreen();
+      }
+    }catch(_){}
+    updateFsBtn();
+  }, {passive:false});
+  ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
+
+  /* Game state */
+  let started=false, over=false, restartLocked=false;
+  let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0);
+  bestEl.textContent = best;
+  let spawnTimer = 0;
+
+  /* Physics (smooth fixed step) */
+  const SPEED_MULT = isMobile ? 1.40 : 1.50;
+  const G_PPS2         = 4800 * SPEED_MULT;
+  const LIFT_V0        = -1350 * SPEED_MULT;
+  const MAX_FALL_PPS   = 2200 * SPEED_MULT;
+  const PIPE_SPEED_PPS = 480  * SPEED_MULT;
+  const PIPE_W         = 180;
+  const GAP_MIN        = 310, GAP_MAX = 450;
+  const PIPE_SPAWN_EVERY_S = 1.8;
+
+  const BIRD_INSET = 8, GAP_FORGIVE = 12;
+
+  /* Audio (simple) */
+  let audioCtx = null, masterGain = null;
+  let muted = false, audioReady = false;
+  function setMuted(m){ muted = m; if (masterGain) masterGain.gain.value = muted ? 0 : 1;
+    const btn = document.getElementById('muteBtn'); btn.textContent = muted ? "🔇 Muted" : "🔊 Sound"; btn.setAttribute("aria-pressed", String(muted)); }
+  document.getElementById('muteBtn').addEventListener('click', (e)=>{ e.stopPropagation(); setMuted(!muted); });
+  async function initAudioOnce(){
+    if (audioReady) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint:"interactive" });
+    masterGain = audioCtx.createGain(); masterGain.gain.value = muted ? 0 : 0.8; masterGain.connect(audioCtx.destination);
+    try { await audioCtx.resume(); } catch(e){}
+    audioReady = true;
+  }
+  function woosh(dur=0.25){
+    if(!audioReady || muted) return;
+    const len = Math.max(1, audioCtx.sampleRate * dur);
+    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i=0;i<len;i++) data[i] = (Math.random()*2-1)*0.3;
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const lp = audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value = 1200;
+    const g = audioCtx.createGain(); const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(0.4, now+0.01); g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
+    src.connect(lp); lp.connect(g); g.connect(masterGain); src.start(); src.stop(now+dur+0.05);
+  }
+  const playFlap = () => woosh(0.25);
+
+  /* Assets */
+  function loadImageWithTimeout(src, timeoutMs=6000){
+    return new Promise((resolve) => {
+      if(!src){ resolve(null); return; }
+      const img = new Image(); img.referrerPolicy = 'no-referrer';
+      let done = false;
+      const finish = (val)=>{ if(done) return; done = true; resolve(val || null); };
+      const timer = setTimeout(()=>finish(null), timeoutMs);
+      img.onload = ()=>{ clearTimeout(timer); finish(img); };
+      img.onerror = ()=>{ clearTimeout(timer); finish(null); };
+      img.src = src;
+    });
+  }
+  const BG_URL   = "assets/bg.png";
+  const BIRD_URL = "assets/bird.png";
+  let bgImg = null, birdImg = null;
+
+  /* Bird */
+  const bird={
+    x:Math.round(W*0.167),
+    y:Math.round(H*0.5),
+    w:Math.round(H*0.069),
+    h:Math.round(H*0.069),
+    v:0,
+    draw(){
+      ctx.save();
+      const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
+      ctx.translate(this.x+this.w/2,this.y+this.h/2);
+      ctx.rotate(a);
+      if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
+      else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
+      ctx.restore();
+    },
+    step(dt){
+      this.v += G_PPS2 * dt;
+      if (this.v > MAX_FALL_PPS) this.v = MAX_FALL_PPS;
+      this.y += this.v * dt;
+    },
+    flap(){ this.v = LIFT_V0; playFlap(); },
+    reset(){ this.y=Math.round(H*0.5); this.v=0; }
   };
 
-  /* Obstacles: only horizontals for this test */
-  const obs = []; // {x,y,len,h,tile,scored:false}
-  function spawnHBar(xStart, tile){
-    const margin = Math.round(H*0.15);
-    const y = Math.round(Math.random()*(H - 2*margin - PIPE_W) + margin);
-
-    // Keep bar height constant (PIPE_W). Compute number of tiles so each tile is drawn at its natural aspect height->PIPE_W
-    // Target length ~ 2/3 screen, snapped to whole tiles to avoid partial stretching
-    const naturalTileW = tile ? tile.width : 256; // px after rotation
-    const targetLen = Math.round(W*0.66);
-    const tilesCount = Math.max(2, Math.floor(targetLen / naturalTileW));
-    const length = tilesCount * naturalTileW;
-
-    obs.push({ x:xStart, y, len:length, h:PIPE_W, tile, scored:false });
-  }
-  function spawnStartHSeq(){
-    const tile = tiles.length ? tiles[Math.floor(Math.random()*tiles.length)] : null;
-    const x0 = W + 220;
-    spawnHBar(x0,                 tile);
-    spawnHBar(x0 + HSEQ_SPACING,  tile);
-    spawnHBar(x0 + HSEQ_SPACING*2,tile);
-  }
-
-  /* UI / State */
-  const startCard = document.getElementById('startCard');
-  const overCard  = document.getElementById('gameOverCard');
-  const loading   = document.getElementById('loadingOverlay');
-  const scoreEl   = document.getElementById('scoreVal');
-  const lastEl    = document.getElementById('lastVal');
-  const bestEl    = document.getElementById('bestVal');
-
-  let started=false, over=false, restartLock=false;
-  let score=0, last=0, best=Number(localStorage.getItem('flappyMoBest')||0);
-  bestEl.textContent = best;
-
-  function startGame(){
-    started=true; over=false; restartLock=false;
-    last = score; lastEl.textContent = last;
-    score = 0; scoreEl.textContent = '0';
-    obs.length = 0; bird.reset();
-    spawnStartHSeq();
-    startCard.classList.add('hidden');
-    overCard.classList.add('hidden');
-  }
-  function endGame(){
-    if (over) return;
-    over = true;
-    document.getElementById('finalScoreP').textContent = `Score: ${score} • Best: ${best}`;
-    overCard.classList.remove('hidden');
-    restartLock = true; setTimeout(()=>restartLock=false, 1000);
-  }
-
-  /* Input */
-  function tap(e){ e?.preventDefault?.(); e?.stopPropagation?.();
-    if(!started){ startGame(); bird.flap(); return; }
-    if(!over){ bird.flap(); return; }
-    if(!restartLock) startGame();
-  }
-  startCard.addEventListener('click', tap, {passive:false});
-  startCard.addEventListener('touchstart', tap, {passive:false});
-  document.addEventListener('pointerdown', (e)=>{ if(e.target.closest('.card')) return; tap(e); }, {passive:false, capture:true});
-  document.addEventListener('keydown', (e)=>{ if(e.code==='Space'||e.key===' ') tap(e); }, {passive:false});
-
-  /* Draw helpers (no stretching) */
-  function drawHBar(o){
-    if (!o.tile){
-      // safe fallback color if no assets
-      ctx.fillStyle = '#6aa84f';
-      ctx.fillRect(o.x, o.y, o.len, o.h);
-      return;
+  /* Pipe graphics (top/bottom) */
+  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
+  function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
+    if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
+    const scale = drawW / (img.naturalWidth || img.width);
+    const scaledH = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+    const capH    = Math.max(1, Math.round(capPxSrc * scale));
+    const full = makeScaledCanvas(img, drawW, scaledH);
+    const cap  = document.createElement("canvas");
+    const body = document.createElement("canvas");
+    cap.width = drawW; cap.height = Math.min(capH, scaledH);
+    body.width = drawW; body.height = Math.max(1, scaledH - cap.height);
+    const cg = cap.getContext("2d"), bg = body.getContext("2d");
+    cg.imageSmoothingEnabled = bg.imageSmoothingEnabled = true;
+    if (capFrom === "top") {
+      cg.drawImage(full, 0, 0, drawW, cap.height, 0, 0, drawW, cap.height);
+      bg.drawImage(full, 0, cap.height, drawW, body.height, 0, 0, drawW, body.height);
+    } else {
+      cg.drawImage(full, 0, scaledH - cap.height, drawW, cap.height, 0, 0, drawW, cap.height);
+      bg.drawImage(full, 0, 0, drawW, body.height, 0, 0, drawW, body.height);
     }
-    const tile = o.tile;
-    const tileW = tile.width;         // natural rotated width in px
-    const tilesCount = Math.max(1, Math.floor(o.len / tileW));
-    let x = o.x;
-    for (let i=0; i<tilesCount; i++){
-      ctx.drawImage(tile, x, o.y, tileW, o.h);   // scale only vertically to PIPE_W; width uses natural tile width multiples (no horizontal stretch)
-      x += tileW;
+    return { cap, body };
+  }
+  function drawBodyTiled(x,yStart,totalH,tile,mode,w){
+    const th=tile.height; if(totalH<=0||th<=0) return;
+    if(mode==="topUp"){
+      let y=totalH-th;
+      while(y>=0){ ctx.drawImage(tile,x,y,w,th); y-=th; }
+      const rem=totalH%th; if(rem>0) ctx.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem);
+    } else {
+      let y=yStart, end=yStart+totalH;
+      while(y+th<=end){ ctx.drawImage(tile,x,y,w,th); y+=th; }
+      const left=end-y; if(left>0) ctx.drawImage(tile,0,0,tile.width,left,x,y,w,left);
     }
   }
 
-  /* Main loop (no context scaling anywhere) */
-  let lastT = performance.now();
-  function loop(t){
-    const dt = Math.min(0.06, Math.max(0, (t - lastT)/1000)); lastT = t;
+  const PIPE_STYLES_CFG = [
+    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
+  ];
+  const Raw={ bottoms:[], tops:[] };
+  const Styles=[];
 
-    if (started && !over){
-      // move bars
-      for(const o of obs){ o.x -= SCROLL * dt; }
-      // score when passed
-      for(const o of obs){
-        if(!o.scored && (o.x + o.len) < bird.x){
-          o.scored = true; score++; scoreEl.textContent = score;
-          if (score > best){ best = score; bestEl.textContent = best; localStorage.setItem('flappyMoBest', String(best)); }
-        }
+  function rebuildStyles(){
+    Styles.length=0;
+    for(let i=0;i<PIPE_STYLES_CFG.length;i++){
+      const cfg=PIPE_STYLES_CFG[i];
+      const bot=Raw.bottoms[i], top=Raw.tops[i];
+      const drawW = Math.round(PIPE_W * (cfg.scale || 1));
+      const bottom = buildCapBodyPx(bot, drawW, cfg.bottom.capPx, cfg.bottom.capFrom);
+      const topset = buildCapBodyPx(top, drawW, cfg.top.capPx,   cfg.top.capFrom);
+      Styles.push({ name:cfg.name, drawW, bottom, top:topset });
+    }
+  }
+
+  /* Pipes */
+  const pipes=[];
+
+  function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+  function spawnPipe(){
+    if(!Styles.length) return;
+    const margin = Math.round(H * 0.10);
+    const maxSection = Math.round(H * 0.45);
+    const minGapRequired = H - 2*maxSection - 2*margin;
+    const minGap = Math.max(GAP_MIN, Math.min(GAP_MAX, Math.max(0, Math.floor(minGapRequired))));
+    const gap = randInt(minGap, GAP_MAX);
+
+    let top = randInt(margin, H - gap - margin);
+    if (top > maxSection) top = maxSection;
+    let bottomH = H - (top + gap);
+    if (bottomH > maxSection) top = H - gap - maxSection;
+    top = Math.max(margin, Math.min(top, H - gap - margin));
+
+    const styleIndex = Math.floor(Math.random()*Styles.length);
+    const sty = Styles[styleIndex];
+    pipes.push({ x:W, top, gap, w:sty.drawW, styleIndex, scored:false });
+  }
+
+  function updatePipes(dt){
+    spawnTimer += dt * SPEED_MULT;
+    while (spawnTimer >= PIPE_SPAWN_EVERY_S) {
+      spawnPipe();
+      spawnTimer -= PIPE_SPAWN_EVERY_S;
+    }
+    for(const p of pipes){ p.x -= PIPE_SPEED_PPS * dt; }
+
+    // collision + scoring
+    const bx1 = bird.x + BIRD_INSET;
+    const bx2 = bird.x + bird.w - BIRD_INSET;
+    const by1 = bird.y + BIRD_INSET;
+    const by2 = bird.y + bird.h - BIRD_INSET;
+
+    for(const p of pipes){
+      const overlapX = (bx2 > p.x) && (bx1 < p.x + p.w);
+      if (overlapX) {
+        const safeTop = p.top - GAP_FORGIVE;
+        const safeBottom = p.top + p.gap + GAP_FORGIVE;
+        const hitsTop = by1 < safeTop;
+        const hitsBottom = by2 > safeBottom;
+        if (hitsTop || hitsBottom) { endGame(); break; }
       }
-      // bird physics + bounds
-      bird.step(dt);
-      if (bird.y <= 0 || bird.y + bird.h >= H) endGame();
-
-      // collisions
-      const bx1 = bird.x + 8, bx2 = bird.x + bird.w - 8, by1 = bird.y + 8, by2 = bird.y + bird.h - 8;
-      for (const o of obs){
-        const overlapX = (bx2 > o.x) && (bx1 < o.x + o.len);
-        const overlapY = (by2 > o.y) && (by1 < o.y + o.h);
-        if (overlapX && overlapY){ endGame(); break; }
+      if(!p.scored && (p.x+p.w) < bx1){
+        p.scored = true;
+        score++; scoreEl.textContent = score;
+        if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
       }
     }
+    for(let i=pipes.length-1;i>=0;i--) if(pipes[i].x + pipes[i].w <= 0) pipes.splice(i,1);
+  }
 
-    // render (always full world size)
+  function drawBackground(){
+    if(bgImg) ctx.drawImage(bgImg,0,0,W,H);
+    else { ctx.fillStyle="#1e1e1e"; ctx.fillRect(0,0,W,H); }
+  }
+  function drawPipes(){
+    pipes.forEach(p=>{
+      const sty = Styles[p.styleIndex]; if(!sty) return;
+      const w = p.w;
+
+      // top
+      const topH = p.top;
+      if(topH>0){
+        const cap = sty.top.cap, body = sty.top.body;
+        const capH = Math.min(cap.height, topH), bodyH = topH - capH;
+        if(bodyH>0) drawBodyTiled(p.x, 0, bodyH, body, "topUp", w);
+        ctx.drawImage(cap, p.x, topH - capH, w, capH);
+      }
+
+      // bottom
+      const by = p.top + p.gap;
+      const bottomH = H - by;
+      if(bottomH>0){
+        const cap = sty.bottom.cap, body = sty.bottom.body;
+        const capH = Math.min(cap.height, bottomH);
+        ctx.drawImage(cap, p.x, by, w, capH);
+        const remain = bottomH - capH;
+        if(remain>0) drawBodyTiled(p.x, by + capH, remain, body, "bottomDown", w);
+      }
+    });
+  }
+
+  /* Fixed-step + interpolation for smoothness */
+  const FIXED_HZ = isMobile ? 120 : 240;
+  const FIXED_DT = 1 / FIXED_HZ;
+  const MAX_FRAME_DT = 0.1;
+  let accumulator = 0;
+  let lastTs = performance.now();
+
+  function loop(ts){
+    let frameDt = (ts - lastTs) / 1000;
+    if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT;
+    if (frameDt < 0) frameDt = 0;
+    lastTs = ts;
+
+    accumulator += frameDt;
+
+    while (accumulator >= FIXED_DT) {
+      if(started && !over){
+        updatePipes(FIXED_DT);
+        bird.step(FIXED_DT);
+        if(bird.y + (bird.h - BIRD_INSET) >= H) endGame();
+        if(bird.y + BIRD_INSET <= 0) endGame();
+      }
+      accumulator -= FIXED_DT;
+    }
+
     ctx.clearRect(0,0,W,H);
-    ctx.drawImage(sky, 0, 0, W, H);
-    for (const o of obs) drawHBar(o);
+    drawBackground();
+    drawPipes();
     bird.draw();
 
-    // version tag (black)
+    // Version label (black)
     ctx.fillStyle='#000';
     ctx.font='700 16px Montserrat,system-ui';
     ctx.fillText('v'+VERSION, 14, H-14);
@@ -253,14 +448,93 @@
     requestAnimationFrame(loop);
   }
 
-  /* Boot: load rotated tiles (non-blocking) */
-  (async () => {
-    const imgs = await Promise.all(BOTTOMS.map(load));
-    imgs.forEach(im => { if (im) tiles.push( rotateCCW(im) ); });
-    loading.style.display='none';
-    requestAnimationFrame(loop);
-  })();
-})();
+  /* Flow */
+  function startGame(){
+    started=true; over=false; restartLocked=false; spawnTimer=0;
+    lastScore = score; lastEl.textContent = lastScore;
+    score = 0; scoreEl.textContent = "0";
+    pipes.length = 0; bird.reset();
+    startCard.classList.add('hidden');
+    gameOverCard.classList.add('hidden');
+  }
+  function endGame(){
+    if(over) return;
+    over=true;
+    finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
+    gameOverCard.classList.remove('hidden');
+    gameOverCard.scrollTop = 0;
+    updateFsBtn();
+    restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
+  }
+  function forceToStartScreen(){
+    started=false; over=false; restartLocked=false;
+    ctx.clearRect(0,0,W,H);
+    drawBackground();
+    bird.reset(); bird.draw();
+    startCard.classList.remove('hidden');
+    gameOverCard.classList.add('hidden');
+    updateFsBtn();
+  }
+
+  /* Input */
+  function handleTap(e){
+    e?.preventDefault?.(); e?.stopPropagation?.();
+    initAudioOnce().then(()=>{ try{ audioCtx.resume(); }catch(_){} setMuted(muted); }).catch(()=>{});
+    if(!rotBlock.classList.contains('show')){
+      if(!started){ startGame(); bird.flap(); return; }
+      if(!over){ bird.flap(); return; }
+      if(!restartLocked) startGame();
+    }
+  }
+  startCard.addEventListener('click', handleTap, {passive:false});
+  startCard.addEventListener('touchstart', handleTap, {passive:false});
+  document.addEventListener('pointerdown', (e)=>{
+    if (e.target.closest('#gameOverCard')) return;
+    if (e.target.closest('#muteBtn, #fsBtn')) return;
+    handleTap(e);
+  }, {passive:false, capture:true});
+  document.addEventListener('keydown', (e)=>{ if(e.code==='Space'||e.key===' ') handleTap(e); }, {passive:false});
+
+  /* Boot */
+  const loadingEl = document.getElementById('loadingOverlay');
+  const hideLoading = ()=>{ if (loadingEl) loadingEl.style.display = 'none'; };
+
+  async function boot(){
+    try {
+      const [bg, bird] = await Promise.all([ loadImageWithTimeout(BG_URL), loadImageWithTimeout(BIRD_URL) ]);
+      bgImg   = bg   || null;
+      birdImg = bird || null;
+
+      // Preload pipes (non-blocking)
+      const promises = [];
+      for (const s of PIPE_STYLES_CFG){
+        promises.push(loadImageWithTimeout(s.bottom.url));
+        promises.push(loadImageWithTimeout(s.top.url));
+      }
+      const results = await Promise.allSettled(promises);
+      const bottoms=[], tops=[];
+      for(let i=0;i<PIPE_STYLES_CFG.length;i++){
+        bottoms[i] = results[i*2]?.value || null;
+        tops[i]    = results[i*2+1]?.value || null;
+      }
+      Raw.bottoms = bottoms; Raw.tops = tops;
+      rebuildStyles();
+
+      forceToStartScreen();
+      requestAnimationFrame(loop);
+    } catch(_){
+      forceToStartScreen();
+      requestAnimationFrame(loop);
+    } finally {
+      hideLoading();
+    }
+  }
+
+  window.addEventListener('error', hideLoading, {passive:true});
+  window.addEventListener('unhandledrejection', hideLoading, {passive:true});
+  boot();
+
+})(); // end IIFE
 </script>
 
 </body>
