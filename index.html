@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.53-beta)</title>
+<title>Flappy Mo — Local Assets (v1.54-beta)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,12 +11,14 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
+  /* One true canvas size (world space) — draw at 1920×1080, only scale via CSS transform */
   #game{
     position:fixed; top:50%; left:50%;
-    width:1920px; height:1080px;
-    transform:translate(-50%, -50%) scale(1);
+    width:1920px; height:1080px;                 /* CSS box; DO NOT change via JS */
+    transform:translate(-50%, -50%) scale(1);    /* JS updates scale() only */
     transform-origin:center center;
-    background:#000; touch-action:none; image-rendering:auto;
+    background:#000; touch-action:none;
+    image-rendering:auto;
     border-radius:14px; border:1px solid rgba(255,255,255,.08);
     box-shadow:0 18px 50px rgba(0,0,0,.45);
   }
@@ -68,168 +70,196 @@
 
 <script>
 (() => {
-  const VERSION='1.53-beta';
-  const WORLD_W=1920, WORLD_H=1080;
+  const VERSION='1.54-beta';
+  const W=1920, H=1080;
+
+  /* Fit: ONLY change CSS transform scale (no context scaling) */
+  const cv = document.getElementById('game');
+  function fit(){
+    const vw = window.innerWidth;
+    const vh = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const s = Math.min(vw / W, vh / H);
+    cv.style.transform = `translate(-50%, -50%) scale(${s})`;
+  }
+  addEventListener('resize', fit);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
+  fit();
+
+  const ctx = cv.getContext('2d', { alpha:false });
+  ctx.imageSmoothingEnabled = true;       // never touch ctx.scale or ctx.setTransform
+
+  /* Simple sky background (no stretching) */
+  const sky = (() => {
+    const c = document.createElement('canvas'); c.width=W; c.height=H;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'#cfefff'); grad.addColorStop(1,'#dcf8ff');
+    g.fillStyle = grad; g.fillRect(0,0,W,H);
+    return c;
+  })();
 
   /* Physics */
-  const SPEED_MULT=1.5;
-  const G=4800*SPEED_MULT, LIFT=-1350*SPEED_MULT, MAX_FALL=2200*SPEED_MULT, SCROLL=480*SPEED_MULT;
-  const PIPE_W=180;
-  const HSEQ_SPACING=WORLD_W*0.25; // spacing between the three early horizontals
+  const SPEED=1.5, G=4800*SPEED, LIFT=-1350*SPEED, MAX_FALL=2200*SPEED, SCROLL=480*SPEED;
+  const PIPE_W=180;                    // on-screen thickness of horizontal bars
+  const HSEQ_SPACING = W*0.25;         // spacing between the 3 early horizontals
 
-  /* Canvas */
-  const canvas=document.getElementById('game');
-  const ctx=canvas.getContext('2d',{alpha:false});
-  function fit(){ const s=Math.min(innerWidth/WORLD_W, innerHeight/WORLD_H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
-  addEventListener('resize', fit); fit();
-
-  /* UI */
-  const startCard=document.getElementById('startCard');
-  const overCard =document.getElementById('gameOverCard');
-  const loading  =document.getElementById('loadingOverlay');
-  const scoreEl  =document.getElementById('scoreVal');
-  const lastEl   =document.getElementById('lastVal');
-  const bestEl   =document.getElementById('bestVal');
-
-  /* State */
-  let started=false, over=false, restartLocked=false;
-  let score=0, last=0, best=Number(localStorage.getItem('flappyMoBest')||0);
-  bestEl.textContent=best;
-
-  /* Helpers */
-  function load(src){ return new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; }); }
-  function rotateCCW90(img){
-    const c=document.createElement('canvas'); c.width=img.height; c.height=img.width;
+  /* Load bottom pipe images and pre-rotate CCW 90° (front facing left) */
+  const BOTTOMS=[
+    "assets/pipe1-bottom.png","assets/pipe2-bottom.png","assets/pipe3-bottom.png","assets/pipe4-bottom.png",
+    "assets/pipe5-bottom.png","assets/pipe6-bottom.png","assets/pipe7-bottom.png","assets/pipe8-bottom.png"
+  ];
+  function load(src){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; }); }
+  function rotateCCW(img){
+    const c=document.createElement('canvas'); c.width=img.naturalHeight||img.height; c.height=img.naturalWidth||img.width;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
     g.translate(0,c.height); g.rotate(-Math.PI/2); g.drawImage(img,0,0);
     return c;
   }
-  function makeFallbackBG(){
-    const c=document.createElement('canvas'); c.width=1920; c.height=1080; const g=c.getContext('2d');
-    g.fillStyle='#d9f4ff'; g.fillRect(0,0,c.width,c.height); return c;
-  }
+  const tiles=[]; // rotated canvases
 
-  /* Assets: bottom pipes rotated 90° left (full image, never cropped) */
-  const PIPE_BOTTOM_URLS=[
-    "assets/pipe1-bottom.png","assets/pipe2-bottom.png","assets/pipe3-bottom.png","assets/pipe4-bottom.png",
-    "assets/pipe5-bottom.png","assets/pipe6-bottom.png","assets/pipe7-bottom.png","assets/pipe8-bottom.png"
-  ];
-  let bgImg=makeFallbackBG(); // simple sky
-  const rotatedBars=[]; // canvases (tile images)
-
-  /* Bird */
-  const bird={ x:Math.round(WORLD_W*0.167), y:Math.round(WORLD_H*0.5), w:Math.round(WORLD_H*0.069), h:Math.round(WORLD_H*0.069), v:0,
+  /* Bird (white square placeholder) */
+  const bird = {
+    x: Math.round(W*0.167),
+    y: Math.round(H*0.5),
+    w: Math.round(H*0.069),
+    h: Math.round(H*0.069),
+    v: 0,
     draw(){ ctx.save(); ctx.translate(this.x+this.w/2,this.y+this.h/2); ctx.rotate(Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5))); ctx.fillStyle='#fff'; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); ctx.restore(); },
-    step(dt){ this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
-    flap(){ this.v=LIFT; }, reset(){ this.y=WORLD_H/2; this.v=0; }
+    step(dt){ this.v += G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y += this.v*dt; },
+    flap(){ this.v = LIFT; },
+    reset(){ this.y = Math.round(H*0.5); this.v=0; }
   };
 
-  /* Obstacles */
-  const obstacles=[]; // {type:'h', x, y, length, h, tile, scored}
+  /* Obstacles: only horizontals for this test */
+  const obs = []; // {x,y,len,h,tile,scored:false}
   function spawnHBar(xStart, tile){
-    const y=Math.round(Math.random()*(WORLD_H-300)+150);
-    const targetLen=Math.round(WORLD_W*0.66);
-    // tile.length must be multiple of tile.width for crisp tiling
-    const tilesNeeded=Math.max(2, Math.floor(targetLen / tile.width));
-    const length=tilesNeeded * tile.width;
-    obstacles.push({ type:'h', x:xStart, y, length, h:PIPE_W, tile, scored:false });
+    const margin = Math.round(H*0.15);
+    const y = Math.round(Math.random()*(H - 2*margin - PIPE_W) + margin);
+
+    // Keep bar height constant (PIPE_W). Compute number of tiles so each tile is drawn at its natural aspect height->PIPE_W
+    // Target length ~ 2/3 screen, snapped to whole tiles to avoid partial stretching
+    const naturalTileW = tile ? tile.width : 256; // px after rotation
+    const targetLen = Math.round(W*0.66);
+    const tilesCount = Math.max(2, Math.floor(targetLen / naturalTileW));
+    const length = tilesCount * naturalTileW;
+
+    obs.push({ x:xStart, y, len:length, h:PIPE_W, tile, scored:false });
   }
-  function spawnStartHorizontalsOnce(){
-    // pick one random rotated style for all three to keep a consistent look
-    const tile=rotatedBars.length? rotatedBars[Math.floor(Math.random()*rotatedBars.length)] : null;
-    const x0=WORLD_W+220;
-    spawnHBar(x0, tile);
-    spawnHBar(x0+HSEQ_SPACING, tile);
-    spawnHBar(x0+HSEQ_SPACING*2, tile);
+  function spawnStartHSeq(){
+    const tile = tiles.length ? tiles[Math.floor(Math.random()*tiles.length)] : null;
+    const x0 = W + 220;
+    spawnHBar(x0,                 tile);
+    spawnHBar(x0 + HSEQ_SPACING,  tile);
+    spawnHBar(x0 + HSEQ_SPACING*2,tile);
   }
 
-  /* Flow */
+  /* UI / State */
+  const startCard = document.getElementById('startCard');
+  const overCard  = document.getElementById('gameOverCard');
+  const loading   = document.getElementById('loadingOverlay');
+  const scoreEl   = document.getElementById('scoreVal');
+  const lastEl    = document.getElementById('lastVal');
+  const bestEl    = document.getElementById('bestVal');
+
+  let started=false, over=false, restartLock=false;
+  let score=0, last=0, best=Number(localStorage.getItem('flappyMoBest')||0);
+  bestEl.textContent = best;
+
   function startGame(){
-    started=true; over=false; restartLocked=false;
-    last=score; lastEl.textContent=last;
-    score=0; scoreEl.textContent='0';
-    obstacles.length=0; bird.reset();
-    spawnStartHorizontalsOnce();
+    started=true; over=false; restartLock=false;
+    last = score; lastEl.textContent = last;
+    score = 0; scoreEl.textContent = '0';
+    obs.length = 0; bird.reset();
+    spawnStartHSeq();
     startCard.classList.add('hidden');
     overCard.classList.add('hidden');
   }
   function endGame(){
-    if(over) return; over=true;
-    document.getElementById('finalScoreP').textContent=`Score: ${score} • Best: ${best}`;
+    if (over) return;
+    over = true;
+    document.getElementById('finalScoreP').textContent = `Score: ${score} • Best: ${best}`;
     overCard.classList.remove('hidden');
-    restartLocked=true; setTimeout(()=>restartLocked=false, 1000);
+    restartLock = true; setTimeout(()=>restartLock=false, 1000);
   }
 
   /* Input */
-  function handleTap(e){ e?.preventDefault?.(); e?.stopPropagation?.();
+  function tap(e){ e?.preventDefault?.(); e?.stopPropagation?.();
     if(!started){ startGame(); bird.flap(); return; }
     if(!over){ bird.flap(); return; }
-    if(!restartLocked) startGame();
+    if(!restartLock) startGame();
   }
-  startCard.addEventListener('click',handleTap,{passive:false});
-  startCard.addEventListener('touchstart',handleTap,{passive:false});
-  document.addEventListener('pointerdown',(e)=>{ if(e.target.closest('.card')) return; handleTap(e); },{passive:false,capture:true});
-  document.addEventListener('keydown',(e)=>{ if(e.code==='Space'||e.key===' '||!started) handleTap(e); },{passive:false});
+  startCard.addEventListener('click', tap, {passive:false});
+  startCard.addEventListener('touchstart', tap, {passive:false});
+  document.addEventListener('pointerdown', (e)=>{ if(e.target.closest('.card')) return; tap(e); }, {passive:false, capture:true});
+  document.addEventListener('keydown', (e)=>{ if(e.code==='Space'||e.key===' ') tap(e); }, {passive:false});
 
-  /* Loop */
-  let lastTs=performance.now();
-  function drawH(o){
-    if(!o.tile){
-      // fallback color if assets missing
-      ctx.fillStyle='#4cae6a';
-      ctx.fillRect(o.x,o.y,o.length,o.h);
+  /* Draw helpers (no stretching) */
+  function drawHBar(o){
+    if (!o.tile){
+      // safe fallback color if no assets
+      ctx.fillStyle = '#6aa84f';
+      ctx.fillRect(o.x, o.y, o.len, o.h);
       return;
     }
-    // tile the rotated image full-width
-    let x=o.x; const w=o.tile.width, h=o.h;
-    const tiles=Math.max(1, Math.floor(o.length / w));
-    for(let i=0;i<tiles;i++){ ctx.drawImage(o.tile, x, o.y, w, h); x+=w; }
+    const tile = o.tile;
+    const tileW = tile.width;         // natural rotated width in px
+    const tilesCount = Math.max(1, Math.floor(o.len / tileW));
+    let x = o.x;
+    for (let i=0; i<tilesCount; i++){
+      ctx.drawImage(tile, x, o.y, tileW, o.h);   // scale only vertically to PIPE_W; width uses natural tile width multiples (no horizontal stretch)
+      x += tileW;
+    }
   }
-  function loop(ts){
-    const dt=Math.min(0.06, Math.max(0,(ts-lastTs)/1000)); lastTs=ts;
 
-    if(started && !over){
-      for(const o of obstacles){ o.x -= SCROLL*dt; }
-      // scoring
-      for(const o of obstacles){
-        const tail=(o.type==='h') ? o.x+o.length : o.x+PIPE_W;
-        if(!o.scored && tail<bird.x){ o.scored=true; score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); } }
+  /* Main loop (no context scaling anywhere) */
+  let lastT = performance.now();
+  function loop(t){
+    const dt = Math.min(0.06, Math.max(0, (t - lastT)/1000)); lastT = t;
+
+    if (started && !over){
+      // move bars
+      for(const o of obs){ o.x -= SCROLL * dt; }
+      // score when passed
+      for(const o of obs){
+        if(!o.scored && (o.x + o.len) < bird.x){
+          o.scored = true; score++; scoreEl.textContent = score;
+          if (score > best){ best = score; bestEl.textContent = best; localStorage.setItem('flappyMoBest', String(best)); }
+        }
       }
       // bird physics + bounds
       bird.step(dt);
-      if(bird.y <= 0 || bird.y + bird.h >= WORLD_H) endGame();
+      if (bird.y <= 0 || bird.y + bird.h >= H) endGame();
 
-      // collisions (horizontal only in this test build)
-      const bx1=bird.x+8, bx2=bird.x+bird.w-8, by1=bird.y+8, by2=bird.y+bird.h-8;
-      for(const o of obstacles){
-        if(o.type!=='h') continue;
-        const overlapX = (bx2 > o.x) && (bx1 < o.x + o.length);
+      // collisions
+      const bx1 = bird.x + 8, bx2 = bird.x + bird.w - 8, by1 = bird.y + 8, by2 = bird.y + bird.h - 8;
+      for (const o of obs){
+        const overlapX = (bx2 > o.x) && (bx1 < o.x + o.len);
         const overlapY = (by2 > o.y) && (by1 < o.y + o.h);
-        if(overlapX && overlapY){ endGame(); break; }
+        if (overlapX && overlapY){ endGame(); break; }
       }
     }
 
-    // render
-    ctx.clearRect(0,0,WORLD_W,WORLD_H);
-    ctx.drawImage(bgImg,0,0,WORLD_W,WORLD_H);
-    for(const o of obstacles){ if(o.type==='h') drawH(o); }
+    // render (always full world size)
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(sky, 0, 0, W, H);
+    for (const o of obs) drawHBar(o);
     bird.draw();
 
-    // version (single, black)
-    ctx.fillStyle='#000'; ctx.font='700 16px Montserrat,system-ui'; ctx.fillText('v'+VERSION,14,WORLD_H-14);
+    // version tag (black)
+    ctx.fillStyle='#000';
+    ctx.font='700 16px Montserrat,system-ui';
+    ctx.fillText('v'+VERSION, 14, H-14);
 
     requestAnimationFrame(loop);
   }
 
-  /* Boot: load rotated bottom pipes */
+  /* Boot: load rotated tiles (non-blocking) */
   (async () => {
-    const imgs = await Promise.all(PIPE_BOTTOM_URLS.map(load));
-    imgs.forEach(im=>{ if(im) rotatedBars.push( rotateCCW90(im) ); });
-    // if none loaded, we still run (bars will use green fallback)
+    const imgs = await Promise.all(BOTTOMS.map(load));
+    imgs.forEach(im => { if (im) tiles.push( rotateCCW(im) ); });
     loading.style.display='none';
     requestAnimationFrame(loop);
   })();
-
 })();
 </script>
 
