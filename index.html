@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.44d)</title>
+<title>Flappy Mo — Local Assets (v1.45-smooth60)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -112,13 +112,13 @@
 
 <script>
 (() => {
-  const VERSION = '1.44d';
+  const VERSION = '1.45-smooth60';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD space (never changes)
   const W = 1920, H = 1080;
 
-  // Physics tuned for 60–165Hz with fixed step
+  // Physics base
   const SPEED_MULT = isMobile ? 1.40 : 1.50;
   const G         = 4800 * SPEED_MULT;
   const LIFT_V0   = -1350 * SPEED_MULT;
@@ -136,12 +136,12 @@
   const ctx = canvas.getContext('2d', { alpha:false });
   ctx.imageSmoothingEnabled = true;
   function fit(){ const vw=innerWidth, vh=Math.round(visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
-  addEventListener('resize', fit); visualViewport&&visualViewport.addEventListener('resize', fit); fit();
+  addEventListener('resize', fit, {passive:true}); visualViewport&&visualViewport.addEventListener('resize', fit, {passive:true}); fit();
 
   // Orientation gate
   const rotBlock = document.getElementById('rotBlock');
   function checkOrientation(){ rotBlock.classList.toggle('show', innerWidth<innerHeight); }
-  addEventListener('resize', checkOrientation); checkOrientation();
+  addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
   // UI refs
   const scoreEl = document.getElementById('scoreVal');
@@ -204,18 +204,6 @@
     }
     return { cap, body };
   }
-  function drawBodyTiled(x,yStart,totalH,tile,mode,w){
-    const th=tile.height; if(totalH<=0||th<=0) return;
-    if(mode==="topUp"){
-      let y=totalH-th;
-      while(y>=0){ ctx.drawImage(tile,x,y,w,th); y-=th; }
-      const rem=totalH%th; if(rem>0) ctx.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem);
-    } else {
-      let y=yStart, end=yStart+totalH;
-      while(y+th<=end){ ctx.drawImage(tile,x,y,w,th); y+=th; }
-      const left=end-y; if(left>0) ctx.drawImage(tile,0,0,tile.width,left,x,y,w,left);
-    }
-  }
 
   // Pipes config + styles
   const PIPE_STYLES_CFG = [
@@ -242,128 +230,85 @@
     }
   }
 
-  /* ===== Systems info (Game Over card) — exact text you provided ===== */
+  /* ===== Systems info (same as your v1.44d content) ===== */
   const SYSTEMS = [
-    // PIPE 1
-    {
-      title: "EATNASTAK (DOUBLE FACE)",
-      blurb:
-`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
+    { title: "EATNASTAK (DOUBLE FACE)",
+      blurb:`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
 offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding
 your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized
 library management.`,
-      img: "assets/pipe1.png",
-      tds: "#",
-      specHeaders: ["Specification","Standard Dimensions"],
-      specs: [
+      img:"assets/pipe1.png", tds:"#",
+      specHeaders:["Specification","Standard Dimensions"],
+      specs:[
         ["Width","24, 30, 36\""],
         ["Depth","7, 8, 9, 10, 11, 12, 13, 14, 15, 16\""],
         ["Height","30, 31, …, 108\""],
         ["Shelf Load Capacity","Up to 50 psf"]
-      ]
-    },
-    // PIPE 2
-    {
-      title: "SMARTSHELF (FIXED, FULL DEPTH)",
-      blurb:
-"Montel's patented SmartShelf is the most versatile storage shelving system available today. This innovative 4-post shelving offers complete flexibility, accommodating items of all shapes and sizes. It is also designed for easy assembly and reconfiguration.",
-      img: "assets/pipe2.png",
-      tds: "#",
-      specHeaders: ["Specification","Standard Dimensions"],
-      specs: [
+      ]},
+    { title:"SMARTSHELF (FIXED, FULL DEPTH)",
+      blurb:"Montel's patented SmartShelf is the most versatile storage shelving system available today. This innovative 4-post shelving offers complete flexibility, accommodating items of all shapes and sizes. It is also designed for easy assembly and reconfiguration.",
+      img:"assets/pipe2.png", tds:"#",
+      specHeaders:["Specification","Standard Dimensions"],
+      specs:[
         ["Width","24, 30, 36, 1M, 42, 48, 54\""],
         ["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],
         ["Height","30, 31, …, 120\""],
         ["Frame Load Capacity","Up to 2,500 lbs per frame"],
         ["Shelf Load Capacity","Up to 500 lbs per shelf"]
-      ]
-    },
-    // PIPE 3
-    {
-      title: "4D Wide Span",
-      blurb:
-"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease. Engineered for strength and versatility, its robust beams support direct item placement, while optional drop panels transform the structure into sturdy shelving. For enhanced functionality, 4D frames seamlessly integrate with SmartShelf 4-Post accessories, delivering unmatched adaptability to meet your storage needs.",
-      img: "assets/pipe3.png",
-      tds: "#",
-      specHeaders: ["Specification","Capacity"],
-      specs: [
+      ]},
+    { title:"4D Wide Span",
+      blurb:"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease. Engineered for strength and versatility, its robust beams support direct item placement, while optional drop panels transform the structure into sturdy shelving. For enhanced functionality, 4D frames seamlessly integrate with SmartShelf 4-Post accessories, delivering unmatched adaptability to meet your storage needs.",
+      img:"assets/pipe3.png", tds:"#",
+      specHeaders:["Specification","Capacity"],
+      specs:[
         ["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],
         ["Load per Level","3\" Beam : 1,000lbs per pair of beam (454 kg)"],
         ["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],
         ["Height","4' to 8' (1.2 m to 2.4 m)"],
         ["Depth","Up to 20' (6.1 m)"]
-      ]
-    },
-    // PIPE 4
-    {
-      title: "SmartSpace",
-      blurb:
-"Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects. Designed with efficiency in mind, the SmartSpace system ensures quick and hassle-free installation, helping you save time and reduce expenses. Choose between two tailored options, manual or mechanically assisted, to meet your unique storage requirements with ease and precision.",
-      img: "assets/pipe4.png",
-      tds: "#",
-      specHeaders: ["Specification","Capacity"],
-      specs: [
+      ]},
+    { title:"SmartSpace",
+      blurb:"Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects. Designed with efficiency in mind, the SmartSpace system ensures quick and hassle-free installation, helping you save time and reduce expenses. Choose between two tailored options, manual or mechanically assisted, to meet your unique storage requirements with ease and precision.",
+      img:"assets/pipe4.png", tds:"#",
+      specHeaders:["Specification","Capacity"],
+      specs:[
         ["Section Load Capacity","2,000 lbs per section (907 kg)"],
         ["Section Length","24\" to 48\" (0.61m - 1.2m)"],
         ["Section Depth","Panels: 12\" to 48\" (0.3m - 1.2 m); Columns: 18\" to 48\" (0.5m - 1.2m)"],
         ["Carriage Load Capacity","16,000 lbs per carriage (7270kg)"],
         ["Carriage Length","Max 24' (7.3 m)"]
-      ]
-    },
-    // PIPE 5
-    {
-      title: "SmartGlide",
-      blurb:
-`Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system that leverages your available space to maximize storage efficiency. It’s an excellent alternative when space limitations prevent you from using one of our larger mobile systems.
+      ]},
+    { title:"SmartGlide",
+      blurb:`Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system that leverages your available space to maximize storage efficiency. It’s an excellent alternative when space limitations prevent you from using one of our larger mobile systems.
 
 APPLICATION:  Unlike other mobile systems, you do not have to open up an aisle to access your stored material. Just slide the system laterally to reach what you need. This allows you to make full use of your storage space without wasting a square inch.
 
 For high-density storage of relatively small and light items in tight quarters, such as files, boxes, medications, and parts, it's vastly superior to conventional filing and storage systems.`,
-      img: "assets/pipe5.png",
-      tds: "#",
-      specHeaders: null,  // no table for this one per your note
-      specs: []
-    },
-    // PIPE 6
-    {
-      title: "GREENRAK",
-      blurb:
-"Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications. Its lightweight, rust-resistant, and simple design allows for easy installation, use, and maintenance.",
-      img: "assets/greenrak.png",
-      tds: "#",
-      specTable: {
-        headers: ["Specification","Section","Mobile"],
-        rows: [
+      img:"assets/pipe5.png", tds:"#",
+      specHeaders:null, specs:[] },
+    { title:"GREENRAK",
+      blurb:"Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications. Its lightweight, rust-resistant, and simple design allows for easy installation, use, and maintenance.",
+      img:"assets/greenrak.png", tds:"#",
+      specTable:{ headers:["Specification","Section","Mobile"],
+        rows:[
           ["Load","Max 2,400 lbs/section","Max 18,000 lbs/mobile"],
           ["Depth","—","36”, 42”, 48”"],
           ["Length","4’, 8’","Max 50’"]
-        ]
-      }
-    },
-    // PIPE 7
-    {
-      title: "Mobilex",
-      blurb:
-"Montel's Mobilex mechanical-assist mobile storage systems provide your organization with the flexibility to customize high-density storage solutions to meet your unique needs. Its innovative mechanism allows for effortless access and mobilization of your items.",
-      img: "assets/pipe7.png",
-      tds: "#",
-      specHeaders: ["Specification","Capacity"],
-      specs: [
+        ]}},
+    { title:"Mobilex",
+      blurb:"Montel's Mobilex mechanical-assist mobile storage systems provide your organization with the flexibility to customize high-density storage solutions to meet your unique needs. Its innovative mechanism allows for effortless access and mobilization of your items.",
+      img:"assets/pipe7.png", tds:"#",
+      specHeaders:["Specification","Capacity"],
+      specs:[
         ["Load Capacity","1,000 lbs per linear foot (1 488kg/m)"],
         ["Depth","3' to 45' (0.91m - 13.7m)"],
         ["Length","15\" to 48\" (0.4m -2.4 m)"]
-      ]
-    },
-    // PIPE 8
-    {
-      title: "SAFERAK 32P & 60P",
-      blurb:
-"Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system. Designed for industrial environments, the SAFERAK® 32P & 60P can handle, respectively, an impressive load capacity of 32,000 lbs and 60,000 lbs per double rack section, optimizing storage efficiency and cutting costs. Embrace the future with smart factory technology, fully equipped for Industry 4.0 to boost your production efficiency and adaptability through seamless digital transformation.",
-      img: "assets/pipe8.png",
-      tds: "#",
-      specTable: {
-        headers: ["Specification","SAFERAK 32P","SAFERAK 60P"],
-        rows: [
+      ]},
+    { title:"SAFERAK 32P & 60P",
+      blurb:"Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system. Designed for industrial environments, the SAFERAK® 32P & 60P can handle, respectively, an impressive load capacity of 32,000 lbs and 60,000 lbs per double rack section, optimizing storage efficiency and cutting costs. Embrace the future with smart factory technology, fully equipped for Industry 4.0 to boost your production efficiency and adaptability through seamless digital transformation.",
+      img:"assets/pipe8.png", tds:"#",
+      specTable:{ headers:["Specification","SAFERAK 32P","SAFERAK 60P"],
+        rows:[
           ["Load per Double-Bay","32,000lbs (14 500 kg)","60,000lbs (27 200 kg)"],
           ["Load per Carriage","256,000 lbs (116 000 kg)","480,000 lbs (217 600 kg)"],
           ["Bay Depth","Up to 8' (2.4 m)","Up to 8' (2.4 m)"],
@@ -377,15 +322,57 @@ For high-density storage of relatively small and light items in tight quarters, 
           ["Rear Controls","Optional","Optional"],
           ["In-Aisle E-Stops","Optional","Optional"],
           ["Illuminated E-Stops","Optional","Optional"]
-        ]
-      }
-    }
+        ]}}
   ];
   /* ===== End Systems info ===== */
 
-  // Pipes list
+  // Pipes (state) — with precomposed sprites
   const pipes=[];
   function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+  function buildPipeSprite(sty, top, gap, w){
+    const c = document.createElement('canvas');
+    c.width = w; c.height = H;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = true;
+
+    // Top segment
+    if (top>0){
+      const cap = sty.top.cap, body = sty.top.body;
+      const capH = Math.min(cap.height, top), bodyH = top - capH;
+      // tile body upward
+      if (bodyH>0){
+        let y = top - capH - body.height;
+        while (y >= 0) { g.drawImage(body, 0, y, w, body.height); y -= body.height; }
+        const rem = (top - capH) % body.height;
+        if (rem > 0) g.drawImage(body, 0, body.height - rem, body.width, rem, 0, 0, w, rem);
+      }
+      // cap
+      g.drawImage(cap, 0, top - capH, w, capH);
+    }
+
+    // Bottom segment
+    const by = top + gap;
+    const bottomH = H - by;
+    if (bottomH>0){
+      const cap = sty.bottom.cap, body = sty.bottom.body;
+      const capH = Math.min(cap.height, bottomH);
+      // cap
+      g.drawImage(cap, 0, by, w, capH);
+      // body tiled downward
+      let y = by + capH;
+      const remain = bottomH - capH;
+      let filled = 0;
+      while (filled + body.height <= remain) {
+        g.drawImage(body, 0, y, w, body.height);
+        y += body.height; filled += body.height;
+      }
+      const left = remain - filled;
+      if (left > 0) g.drawImage(body, 0, 0, body.width, left, 0, y, w, left);
+    }
+
+    return c;
+  }
+
   function spawnPipe(){
     if(!Styles.length) return;
     const margin = Math.round(H * 0.10);
@@ -402,66 +389,53 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     const styleIndex = Math.floor(Math.random()*Styles.length);
     const sty = Styles[styleIndex];
-    pipes.push({ x:W, top, gap, w:sty.drawW, styleIndex, scored:false });
+    const w = sty.drawW;
+
+    const sprite = buildPipeSprite(sty, top, gap, w);
+    pipes.push({ x:W, top, gap, w, styleIndex, scored:false, sprite });
   }
 
-  function updatePipes(dt){
+  function stepPipes(dt){
     spawnTimer += dt * SPEED_MULT;
     while (spawnTimer >= PIPE_SPAWN_EVERY_S) { spawnPipe(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
     for(const p of pipes){ p.x -= SCROLL_PPS * dt; }
+    for(let i=pipes.length-1;i>=0;i--) if(pipes[i].x + pipes[i].w <= 0) pipes.splice(i,1);
+  }
 
-    // collision + scoring
+  function collideAndScore(leftoverTime){
+    // interpolate forward for smooth hit testing (same as render)
     const bx1 = bird.x + BIRD_INSET;
     const bx2 = bird.x + bird.w - BIRD_INSET;
-    const by1 = bird.y + BIRD_INSET;
-    const by2 = bird.y + bird.h - BIRD_INSET;
+    const by1 = bird.yRender - (bird.h/2 - BIRD_INSET); // use render y (computed below)
+    const by2 = bird.yRender + (bird.h/2 - BIRD_INSET);
 
     for(const p of pipes){
-      const overlapX = (bx2 > p.x) && (bx1 < p.x + p.w);
+      const xR = p.x - SCROLL_PPS * leftoverTime;
+      const overlapX = (bx2 > xR) && (bx1 < xR + p.w);
       if (overlapX) {
         const safeTop = p.top - GAP_FORGIVE;
         const safeBottom = p.top + p.gap + GAP_FORGIVE;
         const hitsTop = by1 < safeTop;
         const hitsBottom = by2 > safeBottom;
-        if (hitsTop || hitsBottom) { endGame(p.styleIndex); break; }
+        if (hitsTop || hitsBottom) { endGame(p.styleIndex); return true; }
       }
-      if(!p.scored && (p.x+p.w) < bx1){
+      if(!p.scored && (xR+p.w) < bx1){
         p.scored = true;
         score++; scoreEl.textContent = score;
         if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
       }
     }
-    for(let i=pipes.length-1;i>=0;i--) if(pipes[i].x + pipes[i].w <= 0) pipes.splice(i,1);
+    return false;
   }
 
   // Drawing
   let bgImg=null, birdImg=null;
   function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); } }
-  function drawPipes(){
-    pipes.forEach(p=>{
-      const sty = Styles[p.styleIndex]; if(!sty) return;
-      const w = p.w;
-
-      // top
-      const topH = p.top;
-      if(topH>0){
-        const cap = sty.top.cap, body = sty.top.body;
-        const capH = Math.min(cap.height, topH), bodyH = topH - capH;
-        if(bodyH>0) drawBodyTiled(p.x, 0, bodyH, body, "topUp", w);
-        ctx.drawImage(cap, p.x, topH - capH, w, capH);
-      }
-
-      // bottom
-      const by = p.top + p.gap;
-      const bottomH = H - by;
-      if(bottomH>0){
-        const cap = sty.bottom.cap, body = sty.bottom.body;
-        const capH = Math.min(cap.height, bottomH);
-        ctx.drawImage(cap, p.x, by, w, capH);
-        const remain = bottomH - capH;
-        if(remain>0) drawBodyTiled(p.x, by + capH, remain, body, "bottomDown", w);
-      }
-    });
+  function drawPipesInterpolated(leftoverTime){
+    for(const p of pipes){
+      const xR = p.x - SCROLL_PPS * leftoverTime;
+      ctx.drawImage(p.sprite, xR, 0, p.w, H);
+    }
   }
 
   // Bird
@@ -471,10 +445,11 @@ For high-density storage of relatively small and light items in tight quarters, 
     w:Math.round(H*0.069),
     h:Math.round(H*0.069),
     v:0,
+    yRender:0,
     draw(){
       ctx.save();
       const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
-      ctx.translate(this.x+this.w/2,this.y+this.h/2);
+      ctx.translate(this.x+this.w/2,this.yRender);
       ctx.rotate(a);
       if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
       else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
@@ -485,35 +460,56 @@ For high-density storage of relatively small and light items in tight quarters, 
     reset(){ this.y=Math.round(H*0.5); this.v=0; }
   };
 
-  // Fixed-step loop
-  const FIXED_HZ = isMobile ? 120 : 240;
-  const FIXED_DT = 1 / FIXED_HZ;
-  const MAX_FRAME_DT = 0.1;
+  // Adaptive semi-fixed timestep with interpolation
+  let physicsHz = 120;               // default
+  let STEP = 1/physicsHz;
+  const MAX_FRAME_DT = 0.12;
   let accumulator = 0, lastTs = performance.now();
+
+  // Calibrate refresh rate from first frames
+  const samples=[]; const targetRates=[60,90,100,120,144,165,180,240];
+  function calibrate(dt){
+    if (samples.length<30){ samples.push(dt); return; }
+    const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
+    const estHz = Math.round(1/avg);
+    let nearest = targetRates[0], bestDiff=1e9;
+    for(const r of targetRates){ const d=Math.abs(estHz - r); if(d<bestDiff){ bestDiff=d; nearest=r; } }
+    physicsHz = (nearest<=60)?120:Math.min(nearest,240); // 60Hz -> 120Hz physics; hi-Hz -> native (cap 240)
+    STEP = 1/physicsHz;
+    samples.length=30; // lock (no more growth)
+  }
 
   function loop(ts){
     let frameDt = (ts - lastTs) / 1000;
     if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT;
     if (frameDt < 0) frameDt = 0;
+    if (samples.length<30) calibrate(frameDt);
     lastTs = ts;
 
     accumulator += frameDt;
-    while (accumulator >= FIXED_DT) {
+    while (accumulator >= STEP) {
       if(started && !over){
-        updatePipes(FIXED_DT);
-        bird.step(FIXED_DT);
+        stepPipes(STEP);
+        bird.step(STEP);
         if(bird.y + (bird.h - BIRD_INSET) >= H) endGame(null);
         if(bird.y + BIRD_INSET <= 0) endGame(null);
       }
-      accumulator -= FIXED_DT;
+      accumulator -= STEP;
     }
+    const leftover = accumulator; // 0..STEP
 
+    // Render
     ctx.clearRect(0,0,W,H);
     drawBackground();
-    drawPipes();
+    // Predict bird render pos using simple integration over leftover for smoothness
+    bird.yRender = bird.y + bird.v * leftover + 0.5 * G * leftover * leftover;
+    drawPipesInterpolated(leftover);
     bird.draw();
 
-    // version label (black)
+    // collision/score using the same leftover (so render and logic are in sync visually)
+    if(started && !over){ if (collideAndScore(leftover)) { /* ended */ } }
+
+    // version label
     ctx.fillStyle='rgba(0,0,0,.95)';
     ctx.font='700 16px Montserrat,system-ui';
     ctx.fillText('v'+VERSION, 14, H-14);
