@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.51-beta)</title>
+<title>Flappy Mo — Local Assets (v1.52-beta)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -31,7 +31,8 @@
     overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
     cursor:pointer;
   }
-  .card h1{ margin:0 0 8px; font-size:clamp(20px,4vw,34px); font-weight:800 }
+  .hidden{ display:none } /* <-- RESTORED */
+
   .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
   .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
 
@@ -85,37 +86,144 @@
 
 <script>
 (() => {
-  const VERSION = '1.51-beta';
+  const VERSION = '1.52-beta';
   const WORLD_W=1920, WORLD_H=1080;
+
+  // Physics
   const SPEED_MULT = 1.5;
   const G=4800*SPEED_MULT, LIFT=-1350*SPEED_MULT, MAX_FALL=2200*SPEED_MULT, PIPE_SPEED=480*SPEED_MULT;
   const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
-  const SWITCH_MIN_GAP_X = WORLD_W*0.5, HSEQ_SPACING=WORLD_W*0.25;
+  const HSEQ_SPACING=WORLD_W*0.25; // spacing between early horizontals
 
-  const canvas=document.getElementById('game'), ctx=canvas.getContext('2d',{alpha:false});
-  let bgImg=null, birdImg=null;
+  const canvas=document.getElementById('game');
+  const ctx=canvas.getContext('2d',{alpha:false});
 
-  const obstacles=[];
-  const bird={x:WORLD_W*0.167,y:WORLD_H*0.5,w:75,h:75,v:0,draw(){ctx.save();ctx.translate(this.x+this.w/2,this.y+this.h/2);ctx.rotate(this.v/2000);ctx.drawImage(birdImg||this.fallback,-this.w/2,-this.h/2,this.w,this.h);ctx.restore();},step(dt){this.v+=G*dt;this.v=Math.min(this.v,MAX_FALL);this.y+=this.v*dt;},flap(){this.v=LIFT;},reset(){this.y=WORLD_H/2;this.v=0;},fallback:(()=>{const c=document.createElement('canvas');c.width=64;c.height=64;const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,64,64);return c;})()};
+  // UI refs
+  const startCard = document.getElementById('startCard');
+  const overCard  = document.getElementById('gameOverCard');
+  const scoreEl   = document.getElementById('scoreVal');
+  const lastEl    = document.getElementById('lastVal');
+  const bestEl    = document.getElementById('bestVal');
 
-  function spawnVPipe(){const gap=Math.random()*(GAP_MAX-GAP_MIN)+GAP_MIN;const top=Math.random()*(WORLD_H-gap-200)+100;obstacles.push({type:'v',x:WORLD_W,w:PIPE_W,top, gap,scored:false});}
-  function spawnHBar(startX){const length=WORLD_W*0.6;const y=Math.random()*(WORLD_H-300)+150;obstacles.push({type:'h',x:startX||WORLD_W,y,length,h:PIPE_W,scored:false});}
+  // State
+  let started=false, over=false, restartLocked=false;
+  let score=0, last=0, best=Number(localStorage.getItem('flappyMoBest')||0);
+  bestEl.textContent = best;
 
-  function drawBG(){ctx.fillStyle='#d9f4ff';ctx.fillRect(0,0,WORLD_W,WORLD_H);}
-  function drawObs(){for(const o of obstacles){if(o.type==='v'){ctx.fillStyle='#2e8b57';ctx.fillRect(o.x,0,o.w,o.top);ctx.fillRect(o.x,o.top+o.gap,o.w,WORLD_H-(o.top+o.gap));}else{ctx.fillStyle='#8b5e3c';ctx.fillRect(o.x,o.y,o.length,o.h);}}}
+  // Assets (simple fallback colors; no external image requirement)
+  function drawBG(){ ctx.fillStyle='#d9f4ff'; ctx.fillRect(0,0,WORLD_W,WORLD_H); }
 
-  let score=0,last=0,best=0,started=false,over=false;
-  function startGame(){score=0;obstacles.length=0;bird.reset();spawnHBar(WORLD_W+200);spawnHBar(WORLD_W+200+HSEQ_SPACING);spawnHBar(WORLD_W+200+HSEQ_SPACING*2);started=true;over=false;}
-  function endGame(){over=true;document.getElementById('finalScoreP').textContent=`Score: ${score} • Best: ${best}`;document.getElementById('gameOverCard').classList.remove('hidden');}
-  document.getElementById('startCard').onclick=()=>{if(!started){startGame();bird.flap();}else if(!over){bird.flap();}};
-  document.addEventListener('keydown',()=>{if(!started){startGame();bird.flap();}else if(!over){bird.flap();}});
+  // Bird
+  const bird={x:WORLD_W*0.167,y:WORLD_H*0.5,w:Math.round(WORLD_H*0.069),h:Math.round(WORLD_H*0.069),v:0,
+    draw(){ ctx.save(); ctx.translate(this.x+this.w/2,this.y+this.h/2); ctx.rotate(Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5))); ctx.fillStyle='#fff'; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); ctx.restore(); },
+    step(dt){ this.v += G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y += this.v*dt; },
+    flap(){ this.v = LIFT; },
+    reset(){ this.y=WORLD_H/2; this.v=0; }
+  };
 
+  // Obstacles
+  const obstacles=[]; // {type:'h'|'v', x, y/ top, length/ gap, h/ w}
+  function spawnHBar(xStart){
+    const length = Math.round(WORLD_W*0.65);
+    const y = Math.round(Math.random()*(WORLD_H-300)+150);
+    obstacles.push({ type:'h', x:xStart, y, length, h:PIPE_W, scored:false });
+  }
+  function spawnStartHorizontalsOnce(){
+    const startX = WORLD_W + 220;
+    spawnHBar(startX);
+    spawnHBar(startX + HSEQ_SPACING);
+    spawnHBar(startX + HSEQ_SPACING*2);
+  }
+
+  // Game flow
+  function startGame(){
+    started=true; over=false; restartLocked=false;
+    last = score; lastEl.textContent = last;
+    score = 0; scoreEl.textContent = '0';
+    obstacles.length = 0; bird.reset();
+
+    // initial test: exactly 3 horizontals, once
+    spawnStartHorizontalsOnce();
+
+    startCard.classList.add('hidden');   // <-- HIDE START CARD
+    overCard.classList.add('hidden');    // ensure hidden
+  }
+  function endGame(){
+    if (over) return;
+    over=true;
+    document.getElementById('finalScoreP').textContent=`Score: ${score} • Best: ${best}`;
+    overCard.classList.remove('hidden');
+    restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
+  }
+
+  // Input (tap anywhere except buttons)
+  function handleTap(e){
+    if(e){ e.preventDefault?.(); e.stopPropagation?.(); }
+    if(!started){ startGame(); bird.flap(); return; }
+    if(!over){ bird.flap(); return; }
+    if(!restartLocked){ startGame(); }
+  }
+  // Start card is clickable
+  startCard.addEventListener('click', handleTap, {passive:false});
+  startCard.addEventListener('touchstart', handleTap, {passive:false});
+  // Global click/touch
+  document.addEventListener('pointerdown', (e)=>{
+    if (e.target.closest('#muteBtn, #fsBtn')) return;
+    if (!over || !e.target.closest('#gameOverCard')) handleTap(e);
+  }, {passive:false, capture:true});
+  document.addEventListener('keydown', (e)=>{ handleTap(e); }, {passive:false});
+
+  // Loop
   let lastTs=performance.now();
-  function loop(ts){const dt=(ts-lastTs)/1000;lastTs=ts;if(started&&!over){for(const o of obstacles){o.x-=PIPE_SPEED*dt;if(o.type==='v'&&!o.scored&&o.x+o.w<bird.x){score++;o.scored=true;best=Math.max(best,score);}if(o.type==='h'&&!o.scored&&o.x+o.length<bird.x){score++;o.scored=true;best=Math.max(best,score);}}bird.step(dt);if(bird.y>WORLD_H)endGame();}
-    ctx.clearRect(0,0,WORLD_W,WORLD_H);drawBG();drawObs();bird.draw();
-    ctx.fillStyle='#000';ctx.font='700 16px Montserrat';ctx.fillText('v'+VERSION,14,WORLD_H-14);
-    requestAnimationFrame(loop);}
-  bgImg=null;birdImg=null;document.getElementById('loadingOverlay').style.display='none';requestAnimationFrame(loop);
+  function loop(ts){
+    const dt = Math.min(0.06, Math.max(0, (ts-lastTs)/1000)); lastTs=ts;
+
+    if(started && !over){
+      // Move obstacles
+      for(const o of obstacles){ o.x -= PIPE_SPEED*dt; }
+
+      // Simple scoring (when cleared)
+      for(const o of obstacles){
+        const tail = (o.type==='h') ? (o.x + o.length) : (o.x + o.w);
+        if(!o.scored && tail < bird.x){ o.scored = true; score++; scoreEl.textContent = score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); } }
+      }
+
+      // Bird physics + ground/ceiling
+      bird.step(dt);
+      if (bird.y + bird.h >= WORLD_H || bird.y <= 0) endGame();
+
+      // Collisions with horizontals
+      const bx1 = bird.x+8, bx2 = bird.x + bird.w-8, by1 = bird.y+8, by2 = bird.y + bird.h-8;
+      for(const o of obstacles){
+        if (o.type!=='h') continue;
+        const right = o.x + o.length;
+        const overlapX = (bx2 > o.x) && (bx1 < right);
+        const overlapY = (by2 > o.y) && (by1 < o.y + o.h);
+        if (overlapX && overlapY){ endGame(); break; }
+      }
+    }
+
+    // Render
+    ctx.clearRect(0,0,WORLD_W,WORLD_H);
+    drawBG();
+    // Obstacles
+    for(const o of obstacles){
+      if (o.type==='h'){ ctx.fillStyle='#8b5e3c'; ctx.fillRect(o.x, o.y, o.length, o.h); }
+    }
+    // Bird
+    bird.draw();
+
+    // Version label (black, single line)
+    ctx.fillStyle='#000';
+    ctx.font='700 16px Montserrat,system-ui';
+    ctx.fillText('v'+VERSION, 14, WORLD_H-14);
+
+    requestAnimationFrame(loop);
+  }
+
+  // Boot
+  document.getElementById('loadingOverlay').style.display='none';
+  requestAnimationFrame(loop);
 })();
 </script>
 </body>
