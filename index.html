@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46b)</title>
+<title>Flappy Mo — Local Assets (v1.47-beta)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -84,7 +84,7 @@
 <div class="overlay">
   <div id="startCard" class="card" role="button" aria-label="Start game">
     <h1 id="startTitle">Tap to Start</h1>
-    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.46b</span></b></p>
+    <p id="startSub">Tap again to flap • Best is saved</p>
     <p id="fsHint" style="margin-top:10px; font-size:13px; opacity:.95; display:none; color:#ff4d4f">💡 Tip: For the best experience, use the ⛶ Fullscreen button.</p>
   </div>
 
@@ -119,7 +119,7 @@
 
 <script>
 (function () {
-  const VERSION = '1.46b';
+  const VERSION = '1.47-beta';
   const ua = navigator.userAgent;
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
   const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
@@ -143,9 +143,13 @@
 
   const BIRD_INSET = 8;
 
-  // Test: first obstacle is a single horizontal bar made from the BOTTOM pipe rotated left
-  const TEST_FIRST_HORIZONTAL = true;
-  let spawnedHorizontalTest = false;
+  // Spacing rules
+  const SWITCH_MIN_GAP_X = WORLD_W * 0.5;  // >= half screen when switching H <-> V
+  const HSEQ_COUNT = 3;                    // three horizontals to start
+  const HSEQ_SPACING = WORLD_W * 0.25;     // ~ quarter screen spacing between them
+
+  // Test plan: begin with 3 horizontal bars
+  const BEGIN_WITH_HSEQ = true;
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha:false });
@@ -157,8 +161,6 @@
     ctx.setTransform(backW / WORLD_W, 0, 0, backH / WORLD_H, 0, 0);
   }
   applyBackbuffer();
-
-  document.getElementById('verLabel').textContent = VERSION;
 
   /* ===== Fit & Orientation (CSS scale only) ===== */
   function fitCanvas() {
@@ -325,7 +327,7 @@
     return c;
   }
 
-  /* ===== Pipe asset builders ===== */
+  /* ===== Asset builders for vertical & horizontal ===== */
   function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
   function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
     if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
@@ -346,7 +348,7 @@
       cg.drawImage(full, 0, scaledH - cap.height, drawW, cap.height, 0, 0, drawW, cap.height);
       bg.drawImage(full, 0, 0, drawW, body.height, 0, 0, drawW, body.height);
     }
-    return { cap, body };
+    return { cap, body, full };
   }
   function rotateCCW90(src){
     const c = document.createElement('canvas');
@@ -371,23 +373,28 @@
       const bottom = buildCapBodyPx(bot, drawW, cfg.bottom.capPx, cfg.bottom.capFrom);
       const topset = buildCapBodyPx(top, drawW, cfg.top.capPx,   cfg.top.capFrom);
 
-      // Build horizontal (left-facing) assets from BOTTOM parts
-      const hcap  = rotateCCW90(bottom.cap);   // front (former top) now faces LEFT
-      const hbody = rotateCCW90(bottom.body);  // tiling along X
+      // IMPORTANT: For horizontal bars we must use the FULL bottom PNG (no cutting).
+      // So we rotate the *full* scaled bottom image as a single tile.
+      const fullBottom = bottom.full || makeScaledCanvas(bot, drawW, bot ? Math.round((bot.naturalHeight||bot.height) * (drawW/(bot.naturalWidth||bot.width))) : 120);
+      const fullBottomRotated = rotateCCW90(fullBottom); // left-facing, full-length tile
 
-      Styles.push({ name:cfg.name, drawW,
+      Styles.push({
+        name:cfg.name,
+        drawW,
         bottom, top:topset,
-        hbar:{ cap:hcap, body:hbody, thickness:drawW }
+        hbar:{ tile: fullBottomRotated, thickness: drawW } // thickness = original pipe width
       });
     }
   }
 
-  /* ===== Obstacles: vertical pipes + horizontal bar ===== */
+  /* ===== Obstacles: vertical pipes + horizontal bars ===== */
   const obstacles = []; // {type:'vpipe'|'hbar', ...}
+  let lastType = null;
 
   function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
-  function spawnVPipe(){
+  function spawnVPipe(forceX=null){
     if(!Styles.length) return;
     const margin = Math.round(WORLD_H * 0.10);
     const maxSection = Math.round(WORLD_H * 0.45);
@@ -399,41 +406,121 @@
     if (top > maxSection) top = maxSection;
     let bottomH = WORLD_H - (top + gap);
     if (bottomH > maxSection) top = WORLD_H - gap - maxSection;
-    top = Math.max(margin, Math.min(top, WORLD_H - gap - margin));
+    top = clamp(top, margin, WORLD_H - gap - margin);
 
     const styleIndex = Math.floor(Math.random()*Styles.length);
     const sty = Styles[styleIndex];
-    obstacles.push({ type:'vpipe', x:WORLD_W, prevX:WORLD_W, top, gap, w:sty.drawW, styleIndex, scored:false });
+
+    // x position respecting type-switch spacing
+    let x = WORLD_W;
+    if (forceX!=null) x = forceX;
+    else if (lastType==='hbar') {
+      // ensure >= SWITCH_MIN_GAP_X after last hbar end
+      const last = obstacles[obstacles.length-1];
+      const lastEnd = last.x + last.length; // for hbar we’ll set these
+      x = Math.max(WORLD_W, lastEnd + SWITCH_MIN_GAP_X);
+    }
+
+    obstacles.push({ type:'vpipe', x, prevX:x, top, gap, w:sty.drawW, styleIndex, scored:false });
+    lastType = 'vpipe';
   }
 
-  // Single horizontal bar (using rotated bottom pipe), with left cap and body tiling to the right
-  function spawnHBar(){
+  function spawnHBar(forceX=null, yTop=null){
     const styleIndex = Math.floor(Math.random()*Styles.length);
     const sty = Styles[styleIndex];
+    const tile = sty.hbar.tile;
+    const thickness = sty.hbar.thickness;
 
-    const length = Math.round(WORLD_W * 0.68);      // bar length along X
+    // Choose a feasible Y, ensure space from edges
     const marginY = Math.round(WORLD_H * 0.15);
-    const yTop = randInt(marginY, WORLD_H - marginY - sty.hbar.thickness);
+    let y = (yTop!=null) ? yTop : randInt(marginY, WORLD_H - marginY - thickness);
+
+    // Determine how many full tiles to make the bar length. Never cut tiles.
+    const targetLen = Math.round(WORLD_W * 0.68);
+    const tilesNeeded = Math.max(2, Math.floor(targetLen / tile.width)); // full tiles only
+    const length = tilesNeeded * tile.width;
+
+    // X with switch-spacing
+    let x = WORLD_W;
+    if (forceX!=null) x = forceX;
+    else if (lastType==='vpipe') {
+      const last = obstacles[obstacles.length-1];
+      const lastEnd = last.x + last.w;
+      x = Math.max(WORLD_W, lastEnd + SWITCH_MIN_GAP_X);
+    }
 
     obstacles.push({
       type:'hbar',
-      x: WORLD_W, prevX: WORLD_W,
-      y: yTop, // top of bar
+      x, prevX:x,
+      y,
       length,
       styleIndex,
-      thickness: sty.hbar.thickness,
+      thickness,
+      tileWidth: tile.width,
       scored:false
     });
+    lastType = 'hbar';
   }
 
+  // Start sequence: three horizontals with ~1/4 screen between, reachable heights
+  function spawnStartHorizontalSequence(){
+    if(!Styles.length) return;
+    lastType = null; // treat as first
+    const baseX = WORLD_W + 120; // slight offset so you can see it coming
+    const deltaX = HSEQ_SPACING;
+
+    const styIdx = Math.floor(Math.random()*Styles.length);
+    const thickness = Styles[styIdx].hbar.thickness;
+
+    const marginY = Math.round(WORLD_H * 0.15);
+    let y = randInt(marginY, WORLD_H - marginY - thickness);
+    const maxStep = Math.round(WORLD_H * 0.18); // limit vertical changes so it's feasible
+
+    for(let i=0;i<HSEQ_COUNT;i++){
+      const x = baseX + i*deltaX;
+      if (i>0){
+        const minY = clamp(y - maxStep, marginY, WORLD_H - marginY - thickness);
+        const maxY = clamp(y + maxStep, marginY, WORLD_H - marginY - thickness);
+        y = randInt(minY, maxY);
+      }
+      // Force same style for visual consistency across the trio
+      const sty = Styles[styIdx];
+      const tile = sty.hbar.tile;
+      const tilesNeeded = Math.max(2, Math.floor((WORLD_W*0.6) / tile.width));
+      const length = tilesNeeded * tile.width;
+
+      obstacles.push({
+        type:'hbar',
+        x, prevX:x,
+        y,
+        length,
+        styleIndex: styIdx,
+        thickness,
+        tileWidth: tile.width,
+        scored:false
+      });
+      lastType = 'hbar';
+    }
+  }
+
+  // Spawn decision with spacing control
   function spawnObstacle(){
-    if (TEST_FIRST_HORIZONTAL && !spawnedHorizontalTest){
-      spawnedHorizontalTest = true;
-      spawnHBar();
+    // If we began with H sequence, let normal spawning start after they scroll in
+    if (BEGIN_WITH_HSEQ && spawnCount===0){
+      spawnStartHorizontalSequence();
+      spawnCount = HSEQ_COUNT;
       return;
     }
-    spawnVPipe();
+
+    // Decide next type randomly
+    const nextType = (Math.random()<0.25) ? 'hbar' : 'vpipe'; // mainly verticals
+
+    if (nextType === 'hbar') spawnHBar();
+    else spawnVPipe();
+    spawnCount++;
   }
+
+  let spawnCount = 0;
 
   function physicsStep(dt){
     spawnTimer += dt * SPEED_MULT;
@@ -471,10 +558,10 @@
           if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
         }
       } else if (o.type === 'hbar'){
-        // Horizontal collision ONLY: collide if bird overlaps the bar rectangle
         const right = o.x + o.length;
         const overlapX = (bx2 > o.x) && (bx1 < right);
         const overlapY = (by2 > o.y) && (by1 < o.y + o.thickness);
+        // Horizontal collision only: you can pass over/under unless you hit the bar body
         if (overlapX && overlapY){ endGame(o.styleIndex); break; }
 
         if(!o.scored && right < bx1){
@@ -525,7 +612,7 @@
     else { ctx.fillStyle="#1e1e1e"; ctx.fillRect(0,0,WORLD_W,WORLD_H); }
   }
 
-  // Vertical pipe draw helpers
+  // Vertical helpers
   function drawBodyTiled(x,yStart,totalH,tile,mode,w){
     const th=tile.height; if(totalH<=0||th<=0) return;
     if(mode==="topUp"){
@@ -538,12 +625,12 @@
       const left=end-y; if(left>0) ctx.drawImage(tile,0,0,tile.width,left,x,y,w,left);
     }
   }
+
   function drawVPipes(alpha){
     obstacles.forEach(o=>{
       if (o.type !== 'vpipe') return;
       const sty = Styles[o.styleIndex]; if(!sty) return;
       const w = o.w;
-
       const interpX = o.prevX + (o.x - o.prevX) * alpha;
       const renderX = Math.round(interpX);
 
@@ -569,36 +656,22 @@
     });
   }
 
-  // Horizontal body tiling
-  function drawBodyTiledX(xStart,y,totalW,tile,h){
-    const tw=tile.width; if(totalW<=0||tw<=0) return;
-    let x=xStart, end=xStart+totalW;
-    while(x+tw<=end){ ctx.drawImage(tile,x,y,tw,h); x+=tw; }
-    const left=end-x; if(left>0) ctx.drawImage(tile,0,0,left,tile.height,x,y,left,h);
-  }
-
+  // Horizontal: tile FULL rotated bottom image across X (whole tiles only)
   function drawHBar(alpha){
     obstacles.forEach(o=>{
       if (o.type !== 'hbar') return;
       const sty = Styles[o.styleIndex]; if(!sty) return;
+      const tile = sty.hbar.tile;
       const H = sty.hbar.thickness;
 
       const interpX = o.prevX + (o.x - o.prevX) * alpha;
       const renderX = Math.round(interpX);
 
-      const cap = sty.hbar.cap;
-      const body = sty.hbar.body;
-
-      const capW = cap.width;
-      const capH = H;
-
-      // Cap
-      ctx.drawImage(cap, renderX, o.y, capW, capH);
-
-      // Body tiles to the right
-      const remain = o.length - capW;
-      if (remain > 0){
-        drawBodyTiledX(renderX + capW, o.y, remain, body, H);
+      const tiles = Math.max(1, Math.floor(o.length / tile.width));
+      let x = renderX;
+      for(let i=0;i<tiles;i++){
+        ctx.drawImage(tile, x, o.y, tile.width, H);
+        x += tile.width;
       }
     });
   }
@@ -615,12 +688,7 @@
     { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
   ];
 
-  const SYSTEMS = []; // (keeping Game Over simple for this build)
-
-  // Preload system images (optional, no-op here)
-  function preloadSystemImages(){}
-
-  /* ===== Fixed-step update + interpolation ===== */
+  /* ===== Fixed-step + interpolation ===== */
   const FIXED_HZ = isMobile ? 120 : 240;
   const FIXED_DT = 1 / FIXED_HZ;
   const MAX_FRAME_DT = 0.1;
@@ -655,9 +723,12 @@
     drawHBar(alpha);
     bird.draw(alpha);
 
-    ctx.fillStyle='rgba(255,255,255,.85)';
+    // Version label (bottom-left), dark grey, "beta"
+    ctx.fillStyle='rgba(255,255,255,.35)';
     ctx.font='700 16px Montserrat,system-ui';
-    ctx.fillText('v'+VERSION, 14, WORLD_H-14);
+    ctx.fillText('v'+VERSION, 14, WORLD_H-16);
+    ctx.font='600 12px Montserrat,system-ui';
+    ctx.fillText('beta', 14, WORLD_H-2);
 
     requestAnimationFrame(loop);
   }
@@ -665,7 +736,8 @@
   /* ===== Flow ===== */
   function startGame(){
     started=true; over=false; restartLocked=false; spawnTimer=0;
-    spawnedHorizontalTest = false;
+    lastType = null;
+    spawnCount = 0;
     lastScore = score; lastEl.textContent = lastScore;
     score = 0; scoreEl.textContent = "0";
     obstacles.length = 0; bird.reset();
@@ -722,9 +794,8 @@
   let bgImg = null, birdImg = null;
 
   const loadingEl = document.getElementById('loadingOverlay');
-  // Hard failsafe: hide loading overlay regardless after 1200ms
   const hideLoading = ()=>{ if (loadingEl) loadingEl.style.display = 'none'; };
-  setTimeout(hideLoading, 1200);
+  setTimeout(hideLoading, 1200); // hard failsafe
 
   async function gatedBoot(){
     try {
@@ -741,10 +812,9 @@
       lastTs = performance.now();
       requestAnimationFrame(loop);
 
-      // hide loading (normal path)
       hideLoading();
 
-      // Preload pipe images (don’t block the game)
+      // Preload pipe images (non-blocking)
       const promises = [];
       for (const s of PIPE_STYLES_CFG){
         promises.push(loadImageWithTimeout(s.bottom.url));
@@ -758,8 +828,10 @@
       }
       Raw.bottoms = bottoms; Raw.tops = tops;
       rebuildStyles();
-    } catch (e){
-      // If anything throws, still bring up the game with fallbacks and hide loading
+
+      // After assets ready, if already playing and we began with H sequence, ensure it spawns
+      // (Normal startGame() call will build them automatically)
+    } catch (_){
       bgImg   = buildFallbackBG();
       birdImg = buildFallbackBird();
       forceToStartScreen();
@@ -770,7 +842,6 @@
     }
   }
 
-  // Extra insurance: if any error bubbles up, hide loading and try to proceed
   window.addEventListener('error', hideLoading, {passive:true});
   window.addEventListener('unhandledrejection', hideLoading, {passive:true});
 
