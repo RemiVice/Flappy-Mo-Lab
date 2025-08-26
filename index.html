@@ -1,449 +1,641 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <title>Flappy Mo Lab — v1.45.1-smooth60</title>
+<meta charset="UTF-8" />
+<title>Flappy Mo — Local Assets (v1.45-smooth60)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --glass:rgba(20,24,28,.80); --bg:#0b0d10; }
+  * { box-sizing: border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
+  body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  <!-- (Optional) Preload overlay images if you use them in /assets -->
-  <!-- <link rel="preload" as="image" href="assets/gameover.png"> -->
-  <!-- <link rel="preload" as="image" href="assets/retry.png"> -->
+  /* Fixed world canvas (1920x1080). Only CSS scale changes. */
+  #game{
+    position:fixed; top:50%; left:50%;
+    width:1920px; height:1080px;
+    transform:translate(-50%, -50%) scale(1);
+    transform-origin:center center;
+    background:#000; touch-action:none; image-rendering:auto;
+    border-radius:14px; border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 18px 50px rgba(0,0,0,.45);
+  }
 
-  <style>
-    :root { color-scheme: dark light; }
-    * { box-sizing: border-box; }
+  .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
+  .card{
+    pointer-events:auto; color:#fff; background:var(--glass);
+    border:1px solid rgba(255,255,255,.08); border-radius:14px;
+    padding:20px 22px; text-align:center; backdrop-filter:blur(6px);
+    box-shadow:0 10px 30px rgba(0,0,0,.5);
+    max-width:min(92vw,560px); max-height:calc(100vh - 64px);
+    overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
+    scroll-behavior:smooth; cursor:pointer;
+  }
+  .card h1{ margin:0 0 8px; font-size:clamp(20px,4vw,34px); font-weight:800; color:#fff; }
+  .card p{ margin:0; font-size:clamp(13px,3.2vw,16px); color:#fff; }
+  .hidden{ display:none }
 
-    html, body {
-      height: 100%;
-      margin: 0;
-      overflow: hidden;           /* no page scrolling during the game */
-      touch-action: none;         /* disable browser gestures */
-      overscroll-behavior: none;  /* no bounce */
-      background: #000;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    }
+  .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
+  .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
 
-    #stage { position: relative; width: 100vw; height: 100vh; background: #000; }
+  .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:999 }
+  .rot-overlay.show{ display:flex }
+  .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
 
-    canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      image-rendering: pixelated; /* crisp when using pixel-art */
-    }
+  .mute-btn, .fs-btn{ position:fixed; z-index:13; pointer-events:auto; background:var(--glass); color:#fff; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
+  .mute-btn{ right:12px; top:12px; }
+  .fs-btn{ right:12px; bottom:12px; }
 
-    /* HUD (Score/Last/Best + optional buttons) */
-    .hud {
-      position: absolute;
-      top: calc(env(safe-area-inset-top, 0px) + 8px);
-      left: 8px; right: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      color: #fff;
-      text-shadow: 0 1px 2px rgba(0,0,0,.6);
-      user-select: none;
-      pointer-events: none; /* clicks go through to canvas */
-      font-weight: 600;
-      z-index: 10;
-    }
-    .hud .scores {
-      display: flex; gap: 12px; font-size: 16px;
-      padding: 6px 10px; background: rgba(0,0,0,.35); border-radius: 10px;
-    }
-    .hud .actions { pointer-events: auto; display: flex; gap: 8px; }
-    .hud button {
-      appearance: none; border: 0; border-radius: 10px;
-      padding: 8px 12px; font-weight: 700; font-size: 14px;
-      background: rgba(255,255,255,.15); color: #fff; cursor: pointer;
-      backdrop-filter: blur(4px);
-    }
+  #loadingOverlay{
+    position:fixed; inset:0; display:grid; place-items:center;
+    background:#0b0d10; color:#fff; z-index:2000;
+    font-weight:800; font-size:18px;
+  }
 
-    /* Start overlay (centered) */
-    #startOverlay {
-      position: absolute; inset: 0;
-      display: grid; place-items: center;
-      background: linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.55));
-      color: #fff; text-align: center; user-select: none;
-      z-index: 9;
-    }
-    #startOverlay .card {
-      padding: 16px 18px; border-radius: 14px;
-      background: rgba(0,0,0,.55); backdrop-filter: blur(4px);
-      max-width: min(92vw, 520px);
-    }
-    #startOverlay h1 { margin: 0 0 8px; font-size: 24px; }
-    #startOverlay p  { margin: 4px 0; opacity: .9; }
-
-    /* --- FIX #1: Game Over overlay pinned to the TOP on mobile --- */
-    #gameOver {
-      position: fixed;
-      top: calc(env(safe-area-inset-top, 0px) + 0px);
-      left: 0; right: 0;
-      display: none;            /* controlled by JS */
-      margin: 0 auto;
-      z-index: 9999;
-      transform: none;          /* never center with translate */
-      max-height: 100dvh;       /* dynamic viewport height on mobile */
-      overflow: auto;           /* internal scroll if content is tall */
-      background: linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.75));
-      color: #fff;
-    }
-    #gameOver .panel {
-      margin: 12px auto;
-      padding: 16px;
-      max-width: min(92vw, 520px);
-      background: rgba(0,0,0,.55);
-      border-radius: 14px;
-      backdrop-filter: blur(4px);
-    }
-    #gameOver h2 { margin: 0 0 8px; font-size: 22px; }
-    #gameOver p  { margin: 6px 0; opacity: .95; }
-    #gameOver .actions { display: flex; gap: 8px; margin-top: 12px; }
-    #gameOver .actions button {
-      appearance: none; border: 0; border-radius: 10px;
-      padding: 10px 14px; font-weight: 800; font-size: 15px;
-      background: rgba(255,255,255,.2); color: #fff; cursor: pointer;
-    }
-
-    /* When the overlay is open, block clicks on the canvas underneath */
-    body.modal-open #gameCanvas { pointer-events: none; }
-
-    /* Optional rotation overlay */
-    #rotate {
-      display: none;
-      position: absolute; inset: 0;
-      background: rgba(0,0,0,.7);
-      color: #fff;
-      align-items: center; justify-content: center;
-      text-align: center; padding: 20px;
-      z-index: 8;
-    }
-
-    /* Version tag */
-    #ver {
-      position: absolute; right: 8px;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
-      padding: 4px 8px; font-size: 12px; color: #fff; opacity: .75;
-      background: rgba(0,0,0,.35); border-radius: 8px; user-select: none;
-      pointer-events: none;
-      z-index: 10;
-    }
-  </style>
+  /* Game Over system panel visuals */
+  #sysImg { max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px 0; display:none; opacity:0; transition:opacity .25s ease; }
+  /* Force ALL text inside the system box to white */
+  #sysInfoBox, #sysInfoBox * { color:#fff !important; }
+  #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.25); padding:6px; text-align:left; color:#fff; }
+  #sysSpecs th{ font-weight:800; }
+  #sysSpecs td:first-child{ font-weight:600; }
+</style>
 </head>
 <body>
-  <div id="stage">
-    <canvas id="gameCanvas"></canvas>
 
-    <div class="hud">
-      <div class="scores">
-        <div>Score: <span id="score">0</span></div>
-        <div>Last: <span id="last">0</span></div>
-        <div>Best: <span id="best">0</span></div>
-      </div>
-      <div class="actions">
-        <!-- keep if you had them previously; otherwise safe to remove -->
-        <button id="btnSound" type="button">Sound: Off</button>
-        <button id="btnFull" type="button">Fullscreen</button>
-      </div>
-    </div>
+<canvas id="game" width="1920" height="1080"></canvas>
 
-    <div id="startOverlay">
-      <div class="card">
-        <h1>Flappy Mo Lab</h1>
-        <p>Tap or press Space / ↑ to start.</p>
-      </div>
-    </div>
+<!-- HUD -->
+<div class="hud">
+  <div class="badge">Score: <span id="scoreVal">0</span></div>
+  <div class="badge">Last:  <span id="lastVal">0</span></div>
+  <div class="badge">Best:  <span id="bestVal">0</span></div>
+</div>
+<button id="muteBtn" class="mute-btn" aria-pressed="false" title="Toggle sound">🔊 Sound</button>
+<button id="fsBtn" class="fs-btn" title="Fullscreen">⛶ Fullscreen</button>
 
-    <div id="gameOver">
-      <div class="panel">
-        <h2>Game Over</h2>
-        <p>Score: <strong id="goScore">0</strong></p>
-        <p>Best: <strong id="goBest">0</strong></p>
-        <div class="actions">
-          <button id="btnRetry" type="button">Retry</button>
-          <button id="btnClose" type="button">Close</button>
-        </div>
-        <p style="opacity:.8;margin-top:10px;">Hint: tap outside this window to restart.</p>
-      </div>
-    </div>
-
-    <div id="rotate"><div class="msg"><h3>Rotate your device</h3></div></div>
-    <div id="ver">v1.45.1-smooth60</div>
+<!-- Overlays -->
+<div class="overlay">
+  <div id="startCard" class="card">
+    <h1>Tap to Start</h1>
+    <p>Tap again to flap • Best is saved</p>
   </div>
 
-  <script>
-    // ===== DOM references =====
-    const canvas = document.getElementById('gameCanvas');
-    const ctx    = canvas.getContext('2d');
-    const elScore = document.getElementById('score');
-    const elLast  = document.getElementById('last');
-    const elBest  = document.getElementById('best');
-    const elStart = document.getElementById('startOverlay');
-    const elGameOver = document.getElementById('gameOver');
-    const elBtnRetry = document.getElementById('btnRetry');
-    const elBtnClose = document.getElementById('btnClose');
-    const elBtnSound = document.getElementById('btnSound');
-    const elBtnFull  = document.getElementById('btnFull');
-    const elBody     = document.body;
+  <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
+    <h1>Game Over</h1>
+    <p id="finalScoreP">Score: 0 • Best: 0</p>
+    <p style="opacity:.85;font-size:12px;margin-top:8px">Tap <b>outside</b> this window to restart (after 1s)</p>
 
-    // ===== Game state (kept like v1.45-smooth60) =====
-    let isStarted = false;
-    let isGameOver = false;
+    <!-- system info -->
+    <img id="sysImg" alt="System image" />
+    <div id="sysInfoBox" style="margin-top:12px; text-align:left; display:none">
+      <div style="font-weight:800; font-size:16px; margin-bottom:6px">System: <span id="sysTitle">—</span></div>
+      <div id="sysBlurb" style="opacity:.9; font-size:13px; margin-bottom:8px; white-space:pre-line">—</div>
+      <div id="sysSpecsBox" style="margin-top:10px; display:none">
+        <table id="sysSpecs" style="width:100%; border-collapse:collapse; font-size:13px"></table>
+      </div>
+      <div id="sysLinks" style="margin-top:8px; font-size:13px"></div>
+    </div>
+  </div>
+</div>
 
-    // --- FIX #2: input lock to avoid ghost restart after crash ---
-    let inputLocked = false;
+<!-- Landscape-only blocker -->
+<div id="rotBlock" class="rot-overlay">
+  <div class="rot-box">
+    <h2>Rotate your device</h2>
+    <p>This game is landscape-only. Turn your device to play.</p>
+  </div>
+</div>
 
-    // Canvas size / DPR
-    let W = 0, H = 0, DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    ctx.imageSmoothingEnabled = false;
+<div id="loadingOverlay">Loading…</div>
 
-    // Physics & layout (same feel as v1.45-smooth60)
-    const GRAVITY = 1500;     // px/s^2
-    const FLAP    = 380;      // impulse px/s
-    const PIPE_GAP = 180;     // gap size
-    const PIPE_W   = 80;      // pipe width
-    const PIPE_SPACING = 300; // horizontal distance between columns
-    const BIRD_X = 0.28;      // relative X position (28% of width)
+<script>
+(() => {
+  const VERSION = '1.45-smooth60';
+  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-    let bird = { x: 0, y: 0, vy: 0, r: 18 };
-    let pipes = [];
-    let score = 0, lastScore = 0, bestScore = parseInt(localStorage.getItem('bestScore'),10) || 0;
+  // WORLD space (never changes)
+  const W = 1920, H = 1080;
 
-    function clamp(n,a,b){return Math.max(a,Math.min(b,n));}
+  // Physics base
+  const SPEED_MULT = isMobile ? 1.40 : 1.50;
+  const G         = 4800 * SPEED_MULT;
+  const LIFT_V0   = -1350 * SPEED_MULT;
+  const MAX_FALL  = 2200 * SPEED_MULT;
+  const SCROLL_PPS=  480 * SPEED_MULT;
 
-    function updateScoreUI(){
-      elScore.textContent = String(score);
-      elLast.textContent  = String(lastScore);
-      elBest.textContent  = String(bestScore);
-    }
-    updateScoreUI();
+  const PIPE_W    = 180;
+  const GAP_MIN   = 310, GAP_MAX = 450;
+  const PIPE_SPAWN_EVERY_S = 1.8;
 
-    function fit(){
-      const vw = canvas.parentElement.clientWidth;
-      const vh = canvas.parentElement.clientHeight;
-      DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-      W = Math.floor(vw * DPR);
-      H = Math.floor(vh * DPR);
-      canvas.width = W;
-      canvas.height = H;
-      bird.x = Math.floor(W * BIRD_X);
-    }
-    window.addEventListener('resize', fit);
+  const BIRD_INSET = 8, GAP_FORGIVE = 12;
 
-    function resetPipes(){
-      pipes.length = 0;
-      const cols = Math.ceil(W / PIPE_SPACING) + 2;
-      let x = W + 200;
-      for (let i = 0; i < cols; i++) {
-        addPipe(x);
-        x += PIPE_SPACING;
-      }
-    }
-    function addPipe(x){
-      const margin = 60;
-      const topH = Math.floor(margin + Math.random() * (H - margin*2 - PIPE_GAP));
-      pipes.push({ x, topH, passed:false });
-    }
+  // Canvas + fit via CSS only
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha:false });
+  ctx.imageSmoothingEnabled = true;
+  function fit(){ const vw=innerWidth, vh=Math.round(visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
+  addEventListener('resize', fit, {passive:true}); visualViewport&&visualViewport.addEventListener('resize', fit, {passive:true}); fit();
 
-    function resetGame(){
-      fit();
-      score = 0;
-      bird.y  = Math.floor(H * 0.38);
-      bird.vy = 0;
-      resetPipes();
-      updateScoreUI();
-    }
+  // Orientation gate
+  const rotBlock = document.getElementById('rotBlock');
+  function checkOrientation(){ rotBlock.classList.toggle('show', innerWidth<innerHeight); }
+  addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
-    function startGame(){
-      isStarted = true;
-      elStart.style.display = 'none';
-      resetGame();
-    }
+  // UI refs
+  const scoreEl = document.getElementById('scoreVal');
+  const lastEl  = document.getElementById('lastVal');
+  const bestEl  = document.getElementById('bestVal');
+  const startCard   = document.getElementById('startCard');
+  const gameOverCard= document.getElementById('gameOverCard');
+  const finalScoreP = document.getElementById('finalScoreP');
+  const fsBtn = document.getElementById('fsBtn');
 
-    // ===== Overlays =====
-    function showGameOver(){
-      isGameOver = true;
-      // Input lock to ignore the tap that caused the crash
-      inputLocked = true;
-      elGameOver.style.display = 'block';
-      elBody.classList.add('modal-open');
+  function inFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
+  function updateFsBtn(){ const full=!!inFullscreen(); fsBtn.textContent = full ? "⤢ Exit" : "⛶ Fullscreen"; }
+  fsBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); const el=document.documentElement; try{ if(!inFullscreen()){ await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.()); } else { await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.()); } }catch(_){} updateFsBtn(); }, {passive:false});
+  ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
 
-      // update labels
-      document.getElementById('goScore').textContent = String(score);
-      document.getElementById('goBest').textContent  = String(bestScore);
+  // Game state
+  let started=false, over=false, restartLocked=false;
+  let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
+  let spawnTimer = 0;
 
-      setTimeout(()=>{ inputLocked = false; }, 300);
-    }
-    function hideGameOver(){
-      isGameOver = false;
-      elGameOver.style.display = 'none';
-      elBody.classList.remove('modal-open');
-    }
+  // Audio (minimal, safe)
+  let audioCtx=null, masterGain=null, audioReady=false, muted=false;
+  function setMuted(m){ muted=m; if(masterGain) masterGain.gain.value = muted?0:1; const b=document.getElementById('muteBtn'); b.textContent = muted?"🔇 Muted":"🔊 Sound"; b.setAttribute("aria-pressed", String(muted)); }
+  document.getElementById('muteBtn').addEventListener('click', (e)=>{ e.stopPropagation(); setMuted(!muted); });
+  async function initAudioOnce(){ if(audioReady) return; audioCtx = new (window.AudioContext||window.webkitAudioContext)({latencyHint:"interactive"}); masterGain=audioCtx.createGain(); masterGain.gain.value = muted?0:0.8; masterGain.connect(audioCtx.destination); try{ await audioCtx.resume(); }catch(_){} audioReady=true; }
+  function woosh(d=.25){ if(!audioReady||muted) return; const n=Math.max(1,audioCtx.sampleRate*d); const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate); const data=buf.getChannelData(0); for(let i=0;i<n;i++) data[i]=(Math.random()*2-1)*0.3; const src=audioCtx.createBufferSource(); src.buffer=buf; const lp=audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=1200; const g=audioCtx.createGain(); const t=audioCtx.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.4,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+d); src.connect(lp); lp.connect(g); g.connect(masterGain); src.start(); src.stop(t+d+0.05); }
+  const playFlap = ()=>woosh(.25);
 
-    // prevent clicks inside the overlay from falling through
-    elGameOver.addEventListener('pointerdown', (e)=> e.stopPropagation(), { passive: true });
-    elGameOver.addEventListener('click',       (e)=> e.stopPropagation(), { passive: true });
-
-    // ===== Inputs (same feel; unified) =====
-    function flap(){
-      if (!isStarted) { startGame(); return; }
-      if (isGameOver) return;
-      bird.vy = -FLAP;
-    }
-
-    function handleTap(){
-      if (isGameOver) {
-        if (inputLocked) return;     // avoid ghost restart
-        hideGameOver();
-        restartGame();
-        return;
-      }
-      flap();
-    }
-
-    ['pointerdown','mousedown','touchstart'].forEach(evt=>{
-      canvas.addEventListener(evt, (e)=>{ e.preventDefault(); handleTap(); }, { passive:false });
+  // Image helpers
+  function loadImageWithTimeout(src, timeoutMs=6000){
+    return new Promise((resolve) => {
+      if(!src){ resolve(null); return; }
+      const img = new Image(); img.referrerPolicy='no-referrer';
+      let done=false; const finish=(v)=>{ if(done) return; done=true; resolve(v||null); };
+      const timer=setTimeout(()=>finish(null), timeoutMs);
+      img.onload=()=>{ clearTimeout(timer); finish(img); };
+      img.onerror=()=>{ clearTimeout(timer); finish(null); };
+      img.src=src;
     });
-    document.addEventListener('keydown', (e)=>{
-      if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); handleTap(); }
-    });
+  }
+  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
+  function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
+    if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
+    const scale = drawW / (img.naturalWidth || img.width);
+    const scaledH = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+    const capH    = Math.max(1, Math.round(capPxSrc * scale));
+    const full = makeScaledCanvas(img, drawW, scaledH);
+    const cap  = document.createElement("canvas");
+    const body = document.createElement("canvas");
+    cap.width = drawW; cap.height = Math.min(capH, scaledH);
+    body.width = drawW; body.height = Math.max(1, scaledH - cap.height);
+    const cg = cap.getContext("2d"), bg = body.getContext("2d");
+    cg.imageSmoothingEnabled = bg.imageSmoothingEnabled = true;
+    if (capFrom === "top") {
+      cg.drawImage(full, 0, 0, drawW, cap.height, 0, 0, drawW, cap.height);
+      bg.drawImage(full, 0, cap.height, drawW, body.height, 0, 0, drawW, body.height);
+    } else {
+      cg.drawImage(full, 0, scaledH - cap.height, drawW, cap.height, 0, 0, drawW, cap.height);
+      bg.drawImage(full, 0, 0, drawW, body.height, 0, 0, drawW, body.height);
+    }
+    return { cap, body };
+  }
 
-    // Tap outside the overlay = restart (after the lock delay)
-    document.addEventListener('pointerdown', (e)=>{
-      if (!isGameOver || inputLocked) return;
-      if (!elGameOver.contains(e.target)) {
-        hideGameOver();
-        restartGame();
+  // Pipes config + styles
+  const PIPE_STYLES_CFG = [
+    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
+  ];
+  const Raw={ bottoms:[], tops:[] };
+  const Styles=[];
+  function rebuildStyles(){
+    Styles.length=0;
+    for(let i=0;i<PIPE_STYLES_CFG.length;i++){
+      const cfg=PIPE_STYLES_CFG[i];
+      const bot=Raw.bottoms[i], top=Raw.tops[i];
+      const drawW = Math.round(PIPE_W * (cfg.scale || 1));
+      const bottom = buildCapBodyPx(bot, drawW, cfg.bottom.capPx, cfg.bottom.capFrom);
+      const topset = buildCapBodyPx(top, drawW, cfg.top.capPx,   cfg.top.capFrom);
+      Styles.push({ name:cfg.name, bottom, top:topset, drawW });
+    }
+  }
+
+  /* ===== Systems info (same as your v1.44d content) ===== */
+  const SYSTEMS = [
+    { title: "EATNASTAK (DOUBLE FACE)",
+      blurb:`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
+offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding
+your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized
+library management.`,
+      img:"assets/pipe1.png", tds:"#",
+      specHeaders:["Specification","Standard Dimensions"],
+      specs:[
+        ["Width","24, 30, 36\""],
+        ["Depth","7, 8, 9, 10, 11, 12, 13, 14, 15, 16\""],
+        ["Height","30, 31, …, 108\""],
+        ["Shelf Load Capacity","Up to 50 psf"]
+      ]},
+    { title:"SMARTSHELF (FIXED, FULL DEPTH)",
+      blurb:"Montel's patented SmartShelf is the most versatile storage shelving system available today. This innovative 4-post shelving offers complete flexibility, accommodating items of all shapes and sizes. It is also designed for easy assembly and reconfiguration.",
+      img:"assets/pipe2.png", tds:"#",
+      specHeaders:["Specification","Standard Dimensions"],
+      specs:[
+        ["Width","24, 30, 36, 1M, 42, 48, 54\""],
+        ["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],
+        ["Height","30, 31, …, 120\""],
+        ["Frame Load Capacity","Up to 2,500 lbs per frame"],
+        ["Shelf Load Capacity","Up to 500 lbs per shelf"]
+      ]},
+    { title:"4D Wide Span",
+      blurb:"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease. Engineered for strength and versatility, its robust beams support direct item placement, while optional drop panels transform the structure into sturdy shelving. For enhanced functionality, 4D frames seamlessly integrate with SmartShelf 4-Post accessories, delivering unmatched adaptability to meet your storage needs.",
+      img:"assets/pipe3.png", tds:"#",
+      specHeaders:["Specification","Capacity"],
+      specs:[
+        ["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],
+        ["Load per Level","3\" Beam : 1,000lbs per pair of beam (454 kg)"],
+        ["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],
+        ["Height","4' to 8' (1.2 m to 2.4 m)"],
+        ["Depth","Up to 20' (6.1 m)"]
+      ]},
+    { title:"SmartSpace",
+      blurb:"Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects. Designed with efficiency in mind, the SmartSpace system ensures quick and hassle-free installation, helping you save time and reduce expenses. Choose between two tailored options, manual or mechanically assisted, to meet your unique storage requirements with ease and precision.",
+      img:"assets/pipe4.png", tds:"#",
+      specHeaders:["Specification","Capacity"],
+      specs:[
+        ["Section Load Capacity","2,000 lbs per section (907 kg)"],
+        ["Section Length","24\" to 48\" (0.61m - 1.2m)"],
+        ["Section Depth","Panels: 12\" to 48\" (0.3m - 1.2 m); Columns: 18\" to 48\" (0.5m - 1.2m)"],
+        ["Carriage Load Capacity","16,000 lbs per carriage (7270kg)"],
+        ["Carriage Length","Max 24' (7.3 m)"]
+      ]},
+    { title:"SmartGlide",
+      blurb:`Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system that leverages your available space to maximize storage efficiency. It’s an excellent alternative when space limitations prevent you from using one of our larger mobile systems.
+
+APPLICATION:  Unlike other mobile systems, you do not have to open up an aisle to access your stored material. Just slide the system laterally to reach what you need. This allows you to make full use of your storage space without wasting a square inch.
+
+For high-density storage of relatively small and light items in tight quarters, such as files, boxes, medications, and parts, it's vastly superior to conventional filing and storage systems.`,
+      img:"assets/pipe5.png", tds:"#",
+      specHeaders:null, specs:[] },
+    { title:"GREENRAK",
+      blurb:"Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications. Its lightweight, rust-resistant, and simple design allows for easy installation, use, and maintenance.",
+      img:"assets/greenrak.png", tds:"#",
+      specTable:{ headers:["Specification","Section","Mobile"],
+        rows:[
+          ["Load","Max 2,400 lbs/section","Max 18,000 lbs/mobile"],
+          ["Depth","—","36”, 42”, 48”"],
+          ["Length","4’, 8’","Max 50’"]
+        ]}},
+    { title:"Mobilex",
+      blurb:"Montel's Mobilex mechanical-assist mobile storage systems provide your organization with the flexibility to customize high-density storage solutions to meet your unique needs. Its innovative mechanism allows for effortless access and mobilization of your items.",
+      img:"assets/pipe7.png", tds:"#",
+      specHeaders:["Specification","Capacity"],
+      specs:[
+        ["Load Capacity","1,000 lbs per linear foot (1 488kg/m)"],
+        ["Depth","3' to 45' (0.91m - 13.7m)"],
+        ["Length","15\" to 48\" (0.4m -2.4 m)"]
+      ]},
+    { title:"SAFERAK 32P & 60P",
+      blurb:"Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system. Designed for industrial environments, the SAFERAK® 32P & 60P can handle, respectively, an impressive load capacity of 32,000 lbs and 60,000 lbs per double rack section, optimizing storage efficiency and cutting costs. Embrace the future with smart factory technology, fully equipped for Industry 4.0 to boost your production efficiency and adaptability through seamless digital transformation.",
+      img:"assets/pipe8.png", tds:"#",
+      specTable:{ headers:["Specification","SAFERAK 32P","SAFERAK 60P"],
+        rows:[
+          ["Load per Double-Bay","32,000lbs (14 500 kg)","60,000lbs (27 200 kg)"],
+          ["Load per Carriage","256,000 lbs (116 000 kg)","480,000 lbs (217 600 kg)"],
+          ["Bay Depth","Up to 8' (2.4 m)","Up to 8' (2.4 m)"],
+          ["Bay Width","Up to 12' (3.6 m)","Up to 12' (3.6 m)"],
+          ["Carriage Length","Up to 100’ (30 m)","Up to 120’ (36 m)"],
+          ["Industrial Safeties","YES","YES"],
+          ["PLC","YES","YES"],
+          ["Touchscreen UI","YES","YES"],
+          ["Signal Strobe and Buzzers","YES","YES"],
+          ["VPN eWon Connectivity","YES","YES"],
+          ["Rear Controls","Optional","Optional"],
+          ["In-Aisle E-Stops","Optional","Optional"],
+          ["Illuminated E-Stops","Optional","Optional"]
+        ]}}
+  ];
+  /* ===== End Systems info ===== */
+
+  // Pipes (state) — with precomposed sprites
+  const pipes=[];
+  function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+  function buildPipeSprite(sty, top, gap, w){
+    const c = document.createElement('canvas');
+    c.width = w; c.height = H;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = true;
+
+    // Top segment
+    if (top>0){
+      const cap = sty.top.cap, body = sty.top.body;
+      const capH = Math.min(cap.height, top), bodyH = top - capH;
+      // tile body upward
+      if (bodyH>0){
+        let y = top - capH - body.height;
+        while (y >= 0) { g.drawImage(body, 0, y, w, body.height); y -= body.height; }
+        const rem = (top - capH) % body.height;
+        if (rem > 0) g.drawImage(body, 0, body.height - rem, body.width, rem, 0, 0, w, rem);
       }
-    }, { passive: true });
-
-    // Optional buttons (keep same behavior you had)
-    elBtnRetry?.addEventListener('click', ()=>{ if (inputLocked) return; hideGameOver(); restartGame(); });
-    elBtnClose?.addEventListener('click', ()=>{ if (inputLocked) return; hideGameOver(); /* stay paused */ });
-
-    elBtnFull?.addEventListener('click', async ()=>{
-      try {
-        if (!document.fullscreenElement) await canvas.requestFullscreen();
-        else await document.exitFullscreen();
-      } catch {}
-    });
-
-    // ===== Collisions =====
-    function collide(){
-      const bx1 = bird.x - bird.r, bx2 = bird.x + bird.r;
-      const by1 = bird.y - bird.r, by2 = bird.y + bird.r;
-
-      if (by2 >= H || by1 <= 0) return true;
-
-      for (const p of pipes) {
-        const px1 = p.x, px2 = p.x + PIPE_W;
-        if (bx2 < px1 || bx1 > px2) continue;
-        const gapTop = p.topH;
-        const gapBot = p.topH + PIPE_GAP;
-        if (by1 < gapTop || by2 > gapBot) return true;
-      }
-      return false;
+      // cap
+      g.drawImage(cap, 0, top - capH, w, capH);
     }
 
-    // ===== Update (smooth60 like your 1.45, uses rAF dt) =====
-    function update(dt){
-      const speed = 180; // px/s
-
-      // pipes
-      for (const p of pipes) p.x -= speed * dt;
-      if (pipes.length) {
-        if (pipes[0].x + PIPE_W < -50) pipes.shift();
-        const last = pipes[pipes.length - 1];
-        if (last.x < W + 50) addPipe(last.x + PIPE_SPACING);
+    // Bottom segment
+    const by = top + gap;
+    const bottomH = H - by;
+    if (bottomH>0){
+      const cap = sty.bottom.cap, body = sty.bottom.body;
+      const capH = Math.min(cap.height, bottomH);
+      // cap
+      g.drawImage(cap, 0, by, w, capH);
+      // body tiled downward
+      let y = by + capH;
+      const remain = bottomH - capH;
+      let filled = 0;
+      while (filled + body.height <= remain) {
+        g.drawImage(body, 0, y, w, body.height);
+        y += body.height; filled += body.height;
       }
-
-      // bird
-      bird.vy += GRAVITY * dt;
-      bird.vy = clamp(bird.vy, -1000, 900);
-      bird.y  += bird.vy * dt;
-
-      // score when passing a column
-      for (const p of pipes) {
-        if (!p.passed && (p.x + PIPE_W) < bird.x) {
-          p.passed = true;
-          score++;
-          updateScoreUI();
-        }
-      }
-
-      // collision
-      if (collide()) onCrash();
+      const left = remain - filled;
+      if (left > 0) g.drawImage(body, 0, 0, body.width, left, 0, y, w, left);
     }
 
-    function onCrash(){
-      if (isGameOver) return;
-      isGameOver = true;
+    return c;
+  }
 
-      lastScore = score|0;
-      bestScore = Math.max(bestScore, lastScore);
-      localStorage.setItem('bestScore', String(bestScore));
-      updateScoreUI();
+  function spawnPipe(){
+    if(!Styles.length) return;
+    const margin = Math.round(H * 0.10);
+    const maxSection = Math.round(H * 0.45);
+    const minGapRequired = H - 2*maxSection - 2*margin;
+    const minGap = Math.max(GAP_MIN, Math.min(GAP_MAX, Math.max(0, Math.floor(minGapRequired))));
+    const gap = randInt(minGap, GAP_MAX);
 
-      showGameOver();
-    }
+    let top = randInt(margin, H - gap - margin);
+    if (top > maxSection) top = maxSection;
+    let bottomH = H - (top + gap);
+    if (bottomH > maxSection) top = H - gap - maxSection;
+    top = Math.max(margin, Math.min(top, H - gap - margin));
 
-    // ===== Render =====
-    function render(){
-      // background
-      ctx.fillStyle = '#043';
-      ctx.fillRect(0,0,W,H);
+    const styleIndex = Math.floor(Math.random()*Styles.length);
+    const sty = Styles[styleIndex];
+    const w = sty.drawW;
 
-      // simple decorative grid
-      ctx.globalAlpha = 0.08;
-      ctx.fillStyle = '#0ff';
-      for (let x=0; x<W; x+=40) ctx.fillRect(x, 0, 2, H);
-      ctx.globalAlpha = 1;
+    const sprite = buildPipeSprite(sty, top, gap, w);
+    pipes.push({ x:W, top, gap, w, styleIndex, scored:false, sprite });
+  }
 
-      // pipes
-      for (const p of pipes) {
-        ctx.fillStyle = '#2ecc71';
-        ctx.fillRect(p.x, 0, PIPE_W, p.topH);                 // top
-        const b = p.topH + PIPE_GAP;
-        ctx.fillRect(p.x, b, PIPE_W, H - b);                  // bottom
+  function stepPipes(dt){
+    spawnTimer += dt * SPEED_MULT;
+    while (spawnTimer >= PIPE_SPAWN_EVERY_S) { spawnPipe(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
+    for(const p of pipes){ p.x -= SCROLL_PPS * dt; }
+    for(let i=pipes.length-1;i>=0;i--) if(pipes[i].x + pipes[i].w <= 0) pipes.splice(i,1);
+  }
+
+  function collideAndScore(leftoverTime){
+    // interpolate forward for smooth hit testing (same as render)
+    const bx1 = bird.x + BIRD_INSET;
+    const bx2 = bird.x + bird.w - BIRD_INSET;
+    const by1 = bird.yRender - (bird.h/2 - BIRD_INSET); // use render y (computed below)
+    const by2 = bird.yRender + (bird.h/2 - BIRD_INSET);
+
+    for(const p of pipes){
+      const xR = p.x - SCROLL_PPS * leftoverTime;
+      const overlapX = (bx2 > xR) && (bx1 < xR + p.w);
+      if (overlapX) {
+        const safeTop = p.top - GAP_FORGIVE;
+        const safeBottom = p.top + p.gap + GAP_FORGIVE;
+        const hitsTop = by1 < safeTop;
+        const hitsBottom = by2 > safeBottom;
+        if (hitsTop || hitsBottom) { endGame(p.styleIndex); return true; }
       }
+      if(!p.scored && (xR+p.w) < bx1){
+        p.scored = true;
+        score++; scoreEl.textContent = score;
+        if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
+      }
+    }
+    return false;
+  }
 
-      // bird
-      ctx.beginPath();
-      ctx.arc(bird.x, bird.y, bird.r, 0, Math.PI*2);
-      ctx.closePath();
-      ctx.fillStyle = '#f1c40f';
-      ctx.fill();
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#c49a00';
-      ctx.stroke();
+  // Drawing
+  let bgImg=null, birdImg=null;
+  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); } }
+  function drawPipesInterpolated(leftoverTime){
+    for(const p of pipes){
+      const xR = p.x - SCROLL_PPS * leftoverTime;
+      ctx.drawImage(p.sprite, xR, 0, p.w, H);
+    }
+  }
+
+  // Bird
+  const bird={
+    x:Math.round(W*0.167),
+    y:Math.round(H*0.5),
+    w:Math.round(H*0.069),
+    h:Math.round(H*0.069),
+    v:0,
+    yRender:0,
+    draw(){
+      ctx.save();
+      const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
+      ctx.translate(this.x+this.w/2,this.yRender);
+      ctx.rotate(a);
+      if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
+      else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
+      ctx.restore();
+    },
+    step(dt){ this.v += G * dt; if (this.v > MAX_FALL) this.v = MAX_FALL; this.y += this.v * dt; },
+    flap(){ this.v = LIFT_V0; playFlap(); },
+    reset(){ this.y=Math.round(H*0.5); this.v=0; }
+  };
+
+  // Adaptive semi-fixed timestep with interpolation
+  let physicsHz = 120;               // default
+  let STEP = 1/physicsHz;
+  const MAX_FRAME_DT = 0.12;
+  let accumulator = 0, lastTs = performance.now();
+
+  // Calibrate refresh rate from first frames
+  const samples=[]; const targetRates=[60,90,100,120,144,165,180,240];
+  function calibrate(dt){
+    if (samples.length<30){ samples.push(dt); return; }
+    const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
+    const estHz = Math.round(1/avg);
+    let nearest = targetRates[0], bestDiff=1e9;
+    for(const r of targetRates){ const d=Math.abs(estHz - r); if(d<bestDiff){ bestDiff=d; nearest=r; } }
+    physicsHz = (nearest<=60)?120:Math.min(nearest,240); // 60Hz -> 120Hz physics; hi-Hz -> native (cap 240)
+    STEP = 1/physicsHz;
+    samples.length=30; // lock (no more growth)
+  }
+
+  function loop(ts){
+    let frameDt = (ts - lastTs) / 1000;
+    if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT;
+    if (frameDt < 0) frameDt = 0;
+    if (samples.length<30) calibrate(frameDt);
+    lastTs = ts;
+
+    accumulator += frameDt;
+    while (accumulator >= STEP) {
+      if(started && !over){
+        stepPipes(STEP);
+        bird.step(STEP);
+        if(bird.y + (bird.h - BIRD_INSET) >= H) endGame(null);
+        if(bird.y + BIRD_INSET <= 0) endGame(null);
+      }
+      accumulator -= STEP;
+    }
+    const leftover = accumulator; // 0..STEP
+
+    // Render
+    ctx.clearRect(0,0,W,H);
+    drawBackground();
+    // Predict bird render pos using simple integration over leftover for smoothness
+    bird.yRender = bird.y + bird.v * leftover + 0.5 * G * leftover * leftover;
+    drawPipesInterpolated(leftover);
+    bird.draw();
+
+    // collision/score using the same leftover (so render and logic are in sync visually)
+    if(started && !over){ if (collideAndScore(leftover)) { /* ended */ } }
+
+    // version label
+    ctx.fillStyle='rgba(0,0,0,.95)';
+    ctx.font='700 16px Montserrat,system-ui';
+    ctx.fillText('v'+VERSION, 14, H-14);
+
+    requestAnimationFrame(loop);
+  }
+
+  // Game Over system box
+  function endGame(hitStyleIdx){
+    if(over) return;
+    over=true;
+    finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
+
+    const box   = document.getElementById('sysInfoBox');
+    const imgEl = document.getElementById('sysImg');
+    const tEl   = document.getElementById('sysTitle');
+    const bEl   = document.getElementById('sysBlurb');
+    const specsBox = document.getElementById('sysSpecsBox');
+    const sEl   = document.getElementById('sysSpecs');
+    const lEl   = document.getElementById('sysLinks');
+
+    if (hitStyleIdx!=null && SYSTEMS[hitStyleIdx]){
+      const info = SYSTEMS[hitStyleIdx];
+      tEl.textContent = info.title || `System ${hitStyleIdx+1}`;
+      bEl.textContent = info.blurb || '';
+      lEl.innerHTML   = info.tds && info.tds !== '#'
+        ? `<a href="${info.tds}" target="_blank" rel="noopener" style="color:#7dcfff;text-decoration:underline">📄 Technical Data Sheet</a>` : '';
+
+      if(info.img && info.img !== '#'){
+        imgEl.style.opacity = '0';
+        imgEl.onload = ()=>{ imgEl.style.opacity = '1'; };
+        imgEl.src = info.img;
+        imgEl.style.display = 'block';
+      } else { imgEl.style.display = 'none'; }
+
+      // Table or 2-col specs
+      sEl.innerHTML = '';
+      if (info.specTable && Array.isArray(info.specTable.headers) && Array.isArray(info.specTable.rows)) {
+        const headers = info.specTable.headers;
+        sEl.innerHTML = '<thead><tr>' + headers.map(h=>`<th>${h}</th>`).join('') + '</tr></thead><tbody></tbody>';
+        const tbody = sEl.querySelector('tbody');
+        info.specTable.rows.forEach(row => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = row.map((cell,i)=>`<td${i===0?' style="font-weight:600"':''}>${cell}</td>`).join('');
+          tbody.appendChild(tr);
+        });
+        specsBox.style.display = 'block';
+      } else if (info.specHeaders && info.specs && info.specs.length){
+        sEl.innerHTML = '<thead><tr>' + info.specHeaders.map(h=>`<th>${h}</th>`).join('') + '</tr></thead><tbody></tbody>';
+        const tbody = sEl.querySelector('tbody');
+        info.specs.forEach(([k,v])=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td style="font-weight:600">${k}</td><td>${v}</td>`;
+          tbody.appendChild(tr);
+        });
+        specsBox.style.display = 'block';
+      } else {
+        specsBox.style.display = 'none';
+      }
+      box.style.display = 'block';
+    } else {
+      box.style.display = 'none';
+      imgEl.style.display = 'none';
     }
 
-    // ===== Loop (smooth60 feel: rAF with measured dt) =====
-    let lastTS = performance.now();
-    function loop(ts){
-      let dt = (ts - lastTS) / 1000;   // seconds
-      lastTS = ts;
-      if (dt > 0.1) dt = 0.1;          // clamp big tab-switch spikes
+    gameOverCard.classList.remove('hidden');
+    gameOverCard.scrollTop = 0; requestAnimationFrame(()=>{ gameOverCard.scrollTop = 0; });
+    restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
+  }
 
-      if (isStarted && !isGameOver) update(dt);
-      render();
+  function startGame(){
+    started=true; over=false; restartLocked=false; spawnTimer=0;
+    lastScore = score; lastEl.textContent = lastScore;
+    score = 0; scoreEl.textContent = "0";
+    pipes.length = 0; bird.reset();
+    startCard.classList.add('hidden');
+    gameOverCard.classList.add('hidden');
+  }
+
+  function handleTap(e){
+    e?.preventDefault?.(); e?.stopPropagation?.();
+    initAudioOnce().then(()=>{ try{ audioCtx.resume(); }catch(_){} setMuted(muted); }).catch(()=>{});
+    if(!rotBlock.classList.contains('show')){
+      if(!started){ startGame(); bird.flap(); return; }
+      if(!over){ bird.flap(); return; }
+      if(!restartLocked) startGame();
+    }
+  }
+  startCard.addEventListener('click', handleTap, {passive:false});
+  startCard.addEventListener('touchstart', handleTap, {passive:false});
+  document.addEventListener('pointerdown', (e)=>{
+    if (e.target.closest('#gameOverCard')) return;
+    if (e.target.closest('#muteBtn, #fsBtn')) return;
+    handleTap(e);
+  }, {passive:false, capture:true});
+  document.addEventListener('keydown', (e)=>{ if(e.code==='Space'||e.key===' ') handleTap(e); }, {passive:false});
+
+  // Boot (inline, no external script)
+  (async () => {
+    try{
+      const [bg,birdPic] = await Promise.all([
+        loadImageWithTimeout("assets/bg.png"),
+        loadImageWithTimeout("assets/bird.png")
+      ]);
+      bgImg = bg || null; birdImg = birdPic || null;
+
+      const promises = [];
+      for (const s of PIPE_STYLES_CFG){
+        promises.push(loadImageWithTimeout(s.bottom.url));
+        promises.push(loadImageWithTimeout(s.top.url));
+      }
+      const results = await Promise.allSettled(promises);
+      const bottoms=[], tops=[];
+      for (let i=0;i<PIPE_STYLES_CFG.length;i++){
+        bottoms[i] = results[i*2]?.value || null;
+        tops[i]    = results[i*2+1]?.value || null;
+      }
+      Raw.bottoms = bottoms; Raw.tops = tops;
+      rebuildStyles();
+    } finally {
+      document.getElementById('loadingOverlay').style.display='none';
       requestAnimationFrame(loop);
     }
+  })();
 
-    function restartGame(){
-      isGameOver = false;
-      score = 0;
-      resetGame();
-      isStarted = true; // resume immediately
-    }
-
-    // ===== Init =====
-    (function init(){
-      fit();
-      requestAnimationFrame(loop);
-    })();
-  </script>
+})(); // IIFE
+</script>
 </body>
 </html>
