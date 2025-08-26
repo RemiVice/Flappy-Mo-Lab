@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.45-smooth60)</title>
+<title>Flappy Mo — Local Assets (v1.45b-smooth60)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -112,7 +112,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.45-smooth60';
+  const VERSION = '1.45b-smooth60';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD space (never changes)
@@ -230,7 +230,7 @@
     }
   }
 
-  /* ===== Systems info (same as your v1.44d content) ===== */
+  /* ===== Systems info (unchanged) ===== */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb:`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -403,10 +403,9 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   function collideAndScore(leftoverTime){
-    // interpolate forward for smooth hit testing (same as render)
     const bx1 = bird.x + BIRD_INSET;
     const bx2 = bird.x + bird.w - BIRD_INSET;
-    const by1 = bird.yRender - (bird.h/2 - BIRD_INSET); // use render y (computed below)
+    const by1 = bird.yRender - (bird.h/2 - BIRD_INSET);
     const by2 = bird.yRender + (bird.h/2 - BIRD_INSET);
 
     for(const p of pipes){
@@ -456,7 +455,7 @@ For high-density storage of relatively small and light items in tight quarters, 
       ctx.restore();
     },
     step(dt){ this.v += G * dt; if (this.v > MAX_FALL) this.v = MAX_FALL; this.y += this.v * dt; },
-    flap(){ this.v = LIFT_V0; playFlap(); },
+    flap(){ this.v = LIFT_V0; },
     reset(){ this.y=Math.round(H*0.5); this.v=0; }
   };
 
@@ -476,7 +475,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     for(const r of targetRates){ const d=Math.abs(estHz - r); if(d<bestDiff){ bestDiff=d; nearest=r; } }
     physicsHz = (nearest<=60)?120:Math.min(nearest,240); // 60Hz -> 120Hz physics; hi-Hz -> native (cap 240)
     STEP = 1/physicsHz;
-    samples.length=30; // lock (no more growth)
+    samples.length=30; // lock
   }
 
   function loop(ts){
@@ -496,18 +495,24 @@ For high-density storage of relatively small and light items in tight quarters, 
       }
       accumulator -= STEP;
     }
-    const leftover = accumulator; // 0..STEP
+    let leftover = accumulator; // 0..STEP
+
+    /* === SHAKE FIX ===
+       When over==true, do NOT apply interpolation offsets.
+       Freeze render positions to exact last-simulated states. */
+    if (over) leftover = 0;
 
     // Render
     ctx.clearRect(0,0,W,H);
     drawBackground();
-    // Predict bird render pos using simple integration over leftover for smoothness
-    bird.yRender = bird.y + bird.v * leftover + 0.5 * G * leftover * leftover;
+
+    // Predict bird render pos using leftover (or 0 when over)
+    bird.yRender = bird.y + bird.v * leftover + (over ? 0 : 0.5 * G * leftover * leftover);
     drawPipesInterpolated(leftover);
     bird.draw();
 
-    // collision/score using the same leftover (so render and logic are in sync visually)
-    if(started && !over){ if (collideAndScore(leftover)) { /* ended */ } }
+    // collision/score only when playing
+    if(started && !over){ collideAndScore(leftover); }
 
     // version label
     ctx.fillStyle='rgba(0,0,0,.95)';
@@ -521,6 +526,10 @@ For high-density storage of relatively small and light items in tight quarters, 
   function endGame(hitStyleIdx){
     if(over) return;
     over=true;
+
+    // Snap physics so nothing drifts
+    bird.v = 0;
+
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
 
     const box   = document.getElementById('sysInfoBox');
