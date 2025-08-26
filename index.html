@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.52-beta)</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+<title>Flappy Mo — Local Assets (v1.53-beta)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
   :root{ --glass:rgba(20,24,28,.80); --bg:#0b0d10; }
@@ -27,22 +27,13 @@
     border:1px solid rgba(255,255,255,.08); border-radius:14px;
     padding:20px 22px; text-align:center; backdrop-filter:blur(6px);
     box-shadow:0 10px 30px rgba(0,0,0,.5);
-    max-width:min(92vw,560px); max-height:calc(100vh - 64px);
-    overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y;
+    max-width:min(92vw,560px);
     cursor:pointer;
   }
-  .hidden{ display:none } /* <-- RESTORED */
+  .hidden{ display:none }
 
   .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
   .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
-
-  .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:999 }
-  .rot-overlay.show{ display:flex }
-  .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
-
-  .mute-btn, .fs-btn{ position:fixed; z-index:13; pointer-events:auto; background:var(--glass); color:#fff; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
-  .mute-btn{ right:12px; top:12px; }
-  .fs-btn{ right:12px; bottom:12px; }
 
   #loadingOverlay{
     position:fixed; inset:0; display:grid; place-items:center;
@@ -55,176 +46,192 @@
 
 <canvas id="game" width="1920" height="1080"></canvas>
 
-<!-- HUD -->
 <div class="hud">
   <div class="badge">Score: <span id="scoreVal">0</span></div>
   <div class="badge">Last:  <span id="lastVal">0</span></div>
   <div class="badge">Best:  <span id="bestVal">0</span></div>
 </div>
-<button id="muteBtn" class="mute-btn" aria-pressed="false">🔊 Sound</button>
-<button id="fsBtn" class="fs-btn">⛶ Fullscreen</button>
 
-<!-- Overlays -->
 <div class="overlay">
   <div id="startCard" class="card">
-    <h1>Tap to Start</h1>
-    <p>Tap again to flap • Best is saved</p>
+    <h1 style="margin:0 0 8px">Tap to Start</h1>
+    <p style="margin:0">Tap again to flap • Best is saved</p>
   </div>
-
   <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
-    <h1>Game Over</h1>
-    <p id="finalScoreP">Score: 0 • Best: 0</p>
+    <h1 style="margin:0 0 8px">Game Over</h1>
+    <p id="finalScoreP" style="margin:0">Score: 0 • Best: 0</p>
     <p style="opacity:.85;font-size:12px;margin-top:8px">Tap outside to restart (after 1s)</p>
   </div>
-</div>
-
-<div id="rotBlock" class="rot-overlay">
-  <div class="rot-box"><h2>Rotate your device</h2><p>This game is landscape-only.</p></div>
 </div>
 
 <div id="loadingOverlay">Loading…</div>
 
 <script>
 (() => {
-  const VERSION = '1.52-beta';
+  const VERSION='1.53-beta';
   const WORLD_W=1920, WORLD_H=1080;
 
-  // Physics
-  const SPEED_MULT = 1.5;
-  const G=4800*SPEED_MULT, LIFT=-1350*SPEED_MULT, MAX_FALL=2200*SPEED_MULT, PIPE_SPEED=480*SPEED_MULT;
-  const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
-  const HSEQ_SPACING=WORLD_W*0.25; // spacing between early horizontals
+  /* Physics */
+  const SPEED_MULT=1.5;
+  const G=4800*SPEED_MULT, LIFT=-1350*SPEED_MULT, MAX_FALL=2200*SPEED_MULT, SCROLL=480*SPEED_MULT;
+  const PIPE_W=180;
+  const HSEQ_SPACING=WORLD_W*0.25; // spacing between the three early horizontals
 
+  /* Canvas */
   const canvas=document.getElementById('game');
   const ctx=canvas.getContext('2d',{alpha:false});
+  function fit(){ const s=Math.min(innerWidth/WORLD_W, innerHeight/WORLD_H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
+  addEventListener('resize', fit); fit();
 
-  // UI refs
-  const startCard = document.getElementById('startCard');
-  const overCard  = document.getElementById('gameOverCard');
-  const scoreEl   = document.getElementById('scoreVal');
-  const lastEl    = document.getElementById('lastVal');
-  const bestEl    = document.getElementById('bestVal');
+  /* UI */
+  const startCard=document.getElementById('startCard');
+  const overCard =document.getElementById('gameOverCard');
+  const loading  =document.getElementById('loadingOverlay');
+  const scoreEl  =document.getElementById('scoreVal');
+  const lastEl   =document.getElementById('lastVal');
+  const bestEl   =document.getElementById('bestVal');
 
-  // State
+  /* State */
   let started=false, over=false, restartLocked=false;
   let score=0, last=0, best=Number(localStorage.getItem('flappyMoBest')||0);
-  bestEl.textContent = best;
+  bestEl.textContent=best;
 
-  // Assets (simple fallback colors; no external image requirement)
-  function drawBG(){ ctx.fillStyle='#d9f4ff'; ctx.fillRect(0,0,WORLD_W,WORLD_H); }
+  /* Helpers */
+  function load(src){ return new Promise(res=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>res(null); i.src=src; }); }
+  function rotateCCW90(img){
+    const c=document.createElement('canvas'); c.width=img.height; c.height=img.width;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    g.translate(0,c.height); g.rotate(-Math.PI/2); g.drawImage(img,0,0);
+    return c;
+  }
+  function makeFallbackBG(){
+    const c=document.createElement('canvas'); c.width=1920; c.height=1080; const g=c.getContext('2d');
+    g.fillStyle='#d9f4ff'; g.fillRect(0,0,c.width,c.height); return c;
+  }
 
-  // Bird
-  const bird={x:WORLD_W*0.167,y:WORLD_H*0.5,w:Math.round(WORLD_H*0.069),h:Math.round(WORLD_H*0.069),v:0,
+  /* Assets: bottom pipes rotated 90° left (full image, never cropped) */
+  const PIPE_BOTTOM_URLS=[
+    "assets/pipe1-bottom.png","assets/pipe2-bottom.png","assets/pipe3-bottom.png","assets/pipe4-bottom.png",
+    "assets/pipe5-bottom.png","assets/pipe6-bottom.png","assets/pipe7-bottom.png","assets/pipe8-bottom.png"
+  ];
+  let bgImg=makeFallbackBG(); // simple sky
+  const rotatedBars=[]; // canvases (tile images)
+
+  /* Bird */
+  const bird={ x:Math.round(WORLD_W*0.167), y:Math.round(WORLD_H*0.5), w:Math.round(WORLD_H*0.069), h:Math.round(WORLD_H*0.069), v:0,
     draw(){ ctx.save(); ctx.translate(this.x+this.w/2,this.y+this.h/2); ctx.rotate(Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5))); ctx.fillStyle='#fff'; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); ctx.restore(); },
-    step(dt){ this.v += G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y += this.v*dt; },
-    flap(){ this.v = LIFT; },
-    reset(){ this.y=WORLD_H/2; this.v=0; }
+    step(dt){ this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
+    flap(){ this.v=LIFT; }, reset(){ this.y=WORLD_H/2; this.v=0; }
   };
 
-  // Obstacles
-  const obstacles=[]; // {type:'h'|'v', x, y/ top, length/ gap, h/ w}
-  function spawnHBar(xStart){
-    const length = Math.round(WORLD_W*0.65);
-    const y = Math.round(Math.random()*(WORLD_H-300)+150);
-    obstacles.push({ type:'h', x:xStart, y, length, h:PIPE_W, scored:false });
+  /* Obstacles */
+  const obstacles=[]; // {type:'h', x, y, length, h, tile, scored}
+  function spawnHBar(xStart, tile){
+    const y=Math.round(Math.random()*(WORLD_H-300)+150);
+    const targetLen=Math.round(WORLD_W*0.66);
+    // tile.length must be multiple of tile.width for crisp tiling
+    const tilesNeeded=Math.max(2, Math.floor(targetLen / tile.width));
+    const length=tilesNeeded * tile.width;
+    obstacles.push({ type:'h', x:xStart, y, length, h:PIPE_W, tile, scored:false });
   }
   function spawnStartHorizontalsOnce(){
-    const startX = WORLD_W + 220;
-    spawnHBar(startX);
-    spawnHBar(startX + HSEQ_SPACING);
-    spawnHBar(startX + HSEQ_SPACING*2);
+    // pick one random rotated style for all three to keep a consistent look
+    const tile=rotatedBars.length? rotatedBars[Math.floor(Math.random()*rotatedBars.length)] : null;
+    const x0=WORLD_W+220;
+    spawnHBar(x0, tile);
+    spawnHBar(x0+HSEQ_SPACING, tile);
+    spawnHBar(x0+HSEQ_SPACING*2, tile);
   }
 
-  // Game flow
+  /* Flow */
   function startGame(){
     started=true; over=false; restartLocked=false;
-    last = score; lastEl.textContent = last;
-    score = 0; scoreEl.textContent = '0';
-    obstacles.length = 0; bird.reset();
-
-    // initial test: exactly 3 horizontals, once
+    last=score; lastEl.textContent=last;
+    score=0; scoreEl.textContent='0';
+    obstacles.length=0; bird.reset();
     spawnStartHorizontalsOnce();
-
-    startCard.classList.add('hidden');   // <-- HIDE START CARD
-    overCard.classList.add('hidden');    // ensure hidden
+    startCard.classList.add('hidden');
+    overCard.classList.add('hidden');
   }
   function endGame(){
-    if (over) return;
-    over=true;
+    if(over) return; over=true;
     document.getElementById('finalScoreP').textContent=`Score: ${score} • Best: ${best}`;
     overCard.classList.remove('hidden');
-    restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
+    restartLocked=true; setTimeout(()=>restartLocked=false, 1000);
   }
 
-  // Input (tap anywhere except buttons)
-  function handleTap(e){
-    if(e){ e.preventDefault?.(); e.stopPropagation?.(); }
+  /* Input */
+  function handleTap(e){ e?.preventDefault?.(); e?.stopPropagation?.();
     if(!started){ startGame(); bird.flap(); return; }
     if(!over){ bird.flap(); return; }
-    if(!restartLocked){ startGame(); }
+    if(!restartLocked) startGame();
   }
-  // Start card is clickable
-  startCard.addEventListener('click', handleTap, {passive:false});
-  startCard.addEventListener('touchstart', handleTap, {passive:false});
-  // Global click/touch
-  document.addEventListener('pointerdown', (e)=>{
-    if (e.target.closest('#muteBtn, #fsBtn')) return;
-    if (!over || !e.target.closest('#gameOverCard')) handleTap(e);
-  }, {passive:false, capture:true});
-  document.addEventListener('keydown', (e)=>{ handleTap(e); }, {passive:false});
+  startCard.addEventListener('click',handleTap,{passive:false});
+  startCard.addEventListener('touchstart',handleTap,{passive:false});
+  document.addEventListener('pointerdown',(e)=>{ if(e.target.closest('.card')) return; handleTap(e); },{passive:false,capture:true});
+  document.addEventListener('keydown',(e)=>{ if(e.code==='Space'||e.key===' '||!started) handleTap(e); },{passive:false});
 
-  // Loop
+  /* Loop */
   let lastTs=performance.now();
+  function drawH(o){
+    if(!o.tile){
+      // fallback color if assets missing
+      ctx.fillStyle='#4cae6a';
+      ctx.fillRect(o.x,o.y,o.length,o.h);
+      return;
+    }
+    // tile the rotated image full-width
+    let x=o.x; const w=o.tile.width, h=o.h;
+    const tiles=Math.max(1, Math.floor(o.length / w));
+    for(let i=0;i<tiles;i++){ ctx.drawImage(o.tile, x, o.y, w, h); x+=w; }
+  }
   function loop(ts){
-    const dt = Math.min(0.06, Math.max(0, (ts-lastTs)/1000)); lastTs=ts;
+    const dt=Math.min(0.06, Math.max(0,(ts-lastTs)/1000)); lastTs=ts;
 
     if(started && !over){
-      // Move obstacles
-      for(const o of obstacles){ o.x -= PIPE_SPEED*dt; }
-
-      // Simple scoring (when cleared)
+      for(const o of obstacles){ o.x -= SCROLL*dt; }
+      // scoring
       for(const o of obstacles){
-        const tail = (o.type==='h') ? (o.x + o.length) : (o.x + o.w);
-        if(!o.scored && tail < bird.x){ o.scored = true; score++; scoreEl.textContent = score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); } }
+        const tail=(o.type==='h') ? o.x+o.length : o.x+PIPE_W;
+        if(!o.scored && tail<bird.x){ o.scored=true; score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); } }
       }
-
-      // Bird physics + ground/ceiling
+      // bird physics + bounds
       bird.step(dt);
-      if (bird.y + bird.h >= WORLD_H || bird.y <= 0) endGame();
+      if(bird.y <= 0 || bird.y + bird.h >= WORLD_H) endGame();
 
-      // Collisions with horizontals
-      const bx1 = bird.x+8, bx2 = bird.x + bird.w-8, by1 = bird.y+8, by2 = bird.y + bird.h-8;
+      // collisions (horizontal only in this test build)
+      const bx1=bird.x+8, bx2=bird.x+bird.w-8, by1=bird.y+8, by2=bird.y+bird.h-8;
       for(const o of obstacles){
-        if (o.type!=='h') continue;
-        const right = o.x + o.length;
-        const overlapX = (bx2 > o.x) && (bx1 < right);
+        if(o.type!=='h') continue;
+        const overlapX = (bx2 > o.x) && (bx1 < o.x + o.length);
         const overlapY = (by2 > o.y) && (by1 < o.y + o.h);
-        if (overlapX && overlapY){ endGame(); break; }
+        if(overlapX && overlapY){ endGame(); break; }
       }
     }
 
-    // Render
+    // render
     ctx.clearRect(0,0,WORLD_W,WORLD_H);
-    drawBG();
-    // Obstacles
-    for(const o of obstacles){
-      if (o.type==='h'){ ctx.fillStyle='#8b5e3c'; ctx.fillRect(o.x, o.y, o.length, o.h); }
-    }
-    // Bird
+    ctx.drawImage(bgImg,0,0,WORLD_W,WORLD_H);
+    for(const o of obstacles){ if(o.type==='h') drawH(o); }
     bird.draw();
 
-    // Version label (black, single line)
-    ctx.fillStyle='#000';
-    ctx.font='700 16px Montserrat,system-ui';
-    ctx.fillText('v'+VERSION, 14, WORLD_H-14);
+    // version (single, black)
+    ctx.fillStyle='#000'; ctx.font='700 16px Montserrat,system-ui'; ctx.fillText('v'+VERSION,14,WORLD_H-14);
 
     requestAnimationFrame(loop);
   }
 
-  // Boot
-  document.getElementById('loadingOverlay').style.display='none';
-  requestAnimationFrame(loop);
+  /* Boot: load rotated bottom pipes */
+  (async () => {
+    const imgs = await Promise.all(PIPE_BOTTOM_URLS.map(load));
+    imgs.forEach(im=>{ if(im) rotatedBars.push( rotateCCW90(im) ); });
+    // if none loaded, we still run (bars will use green fallback)
+    loading.style.display='none';
+    requestAnimationFrame(loop);
+  })();
+
 })();
 </script>
+
 </body>
 </html>
