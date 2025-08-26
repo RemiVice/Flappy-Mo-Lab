@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.49-beta)</title>
+<title>Flappy Mo — Local Assets (v1.50-beta)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -119,7 +119,7 @@
 
 <script>
 (function () {
-  const VERSION = '1.49-beta';
+  const VERSION = '1.50-beta';
   const ua = navigator.userAgent;
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
   const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
@@ -353,6 +353,18 @@
     return c;
   }
 
+  /* ===== Pipe styles (SINGLE declaration — fixed) ===== */
+  const PIPE_STYLES_CFG = [
+    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
+  ];
+
   const Raw={ bottoms:[], tops:[] };
   const Styles=[];
 
@@ -364,15 +376,8 @@
       const drawW = Math.round(PIPE_W * (cfg.scale || 1));
       const bottom = buildCapBodyPx(bot, drawW, cfg.bottom.capPx, cfg.bottom.capFrom);
       const topset = buildCapBodyPx(top, drawW, cfg.top.capPx,   cfg.top.capFrom);
-
       const fullBottomRotated = rotateCCW90(bottom.full); // full image only
-
-      Styles.push({
-        name:cfg.name,
-        drawW,
-        bottom, top:topset,
-        hbar:{ tile: fullBottomRotated, thickness: drawW }
-      });
+      Styles.push({ name:cfg.name, drawW, bottom, top:topset, hbar:{ tile: fullBottomRotated, thickness: drawW } });
     }
   }
 
@@ -407,7 +412,6 @@
     top = clamp(top, margin, WORLD_H - gap - margin);
 
     const styleIndex = Math.floor(Math.random()*Styles.length);
-    const sty = Styles[styleIndex];
 
     let x = (forceX!=null) ? forceX : WORLD_W;
 
@@ -415,11 +419,11 @@
     const rightH = rightmostEndOf('hbar');
     if (isFinite(rightH)) x = Math.max(x, rightH + SWITCH_MIN_GAP_X);
 
-    // also avoid overlapping the last vertical (just in case)
+    // also avoid overlapping the last vertical
     const rightV = rightmostEndOf('vpipe');
-    if (isFinite(rightV)) x = Math.max(x, rightV + 0); // verticals may be closer
+    if (isFinite(rightV)) x = Math.max(x, rightV + 0);
 
-    obstacles.push({ type:'vpipe', x, prevX:x, top, gap, w:sty.drawW, styleIndex, scored:false });
+    obstacles.push({ type:'vpipe', x, prevX:x, top, gap, w:Styles[styleIndex].drawW, styleIndex, scored:false });
   }
 
   function spawnHBar(forceX=null, yTop=null){
@@ -446,16 +450,7 @@
     const rightH = rightmostEndOf('hbar');
     if (isFinite(rightH)) x = Math.max(x, rightH + HSEQ_SPACING);
 
-    obstacles.push({
-      type:'hbar',
-      x, prevX:x,
-      y,
-      length,
-      styleIndex,
-      thickness,
-      tileWidth: tile.width,
-      scored:false
-    });
+    obstacles.push({ type:'hbar', x, prevX:x, y, length, styleIndex, thickness, tileWidth: tile.width, scored:false });
   }
 
   // Start with 3 horizontals laid strictly one after another
@@ -477,7 +472,7 @@
     let x = WORLD_W + 120;
     obstacles.push({ type:'hbar', x, prevX:x, y, length, styleIndex:styIdx, thickness, tileWidth:tile.width, scored:false });
 
-    // subsequent bars: place AFTER previous end + HSEQ_SPACING
+    // subsequent bars: after previous end + spacing
     for (let i=1;i<HSEQ_COUNT;i++){
       const prevEnd = x + length;
       x = prevEnd + HSEQ_SPACING;
@@ -581,7 +576,7 @@
       if (this.v > MAX_FALL_PPS) this.v = MAX_FALL_PPS;
       this.y += this.v * dt;
     },
-    flap(){ this.v = LIFT_V0; playFlap(); },
+    flap(){ this.v = LIFT_V0; woosh(0.25); },
     reset(){ this.y=Math.round(WORLD_H*0.5); this.prevY=this.y; this.v=0; }
   };
 
@@ -651,18 +646,6 @@
     });
   }
 
-  /* Styles config */
-  const PIPE_STYLES_CFG = [
-    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
-  ];
-
   /* ===== Fixed-step + interpolation ===== */
   const FIXED_HZ = isMobile ? 120 : 240;
   const FIXED_DT = 1 / FIXED_HZ;
@@ -698,8 +681,8 @@
     drawHBar(alpha);
     bird.draw(alpha);
 
-    // Version label bottom-left (dark gray) + beta
-    ctx.fillStyle='rgba(255,255,255,.35)';
+    /* Version label bottom-left — BLACK and “beta” */
+    ctx.fillStyle='#000';
     ctx.font='700 16px Montserrat,system-ui';
     ctx.fillText('v'+VERSION, 14, WORLD_H-16);
     ctx.font='600 12px Montserrat,system-ui';
@@ -711,12 +694,12 @@
   /* ===== Flow ===== */
   function startGame(){
     started=true; over=false; restartLocked=false; spawnTimer=0;
+    spawnCount = 0;
     lastScore = score; lastEl.textContent = lastScore;
     score = 0; scoreEl.textContent = "0";
     obstacles.length = 0; bird.reset();
     startCard.classList.add('hidden');
     gameOverCard.classList.add('hidden');
-    spawnCount = 0;
   }
   function endGame(){
     if(over) return;
@@ -769,15 +752,11 @@
 
   const loadingEl = document.getElementById('loadingOverlay');
   const hideLoading = ()=>{ if (loadingEl) loadingEl.style.display = 'none'; };
-  setTimeout(hideLoading, 1200); // hard failsafe
+  setTimeout(hideLoading, 1200); // hard failsafe even if something slows down
 
   async function gatedBoot(){
     try {
-      const [bg, bird] = await Promise.all([
-        loadImageWithTimeout(BG_URL),
-        loadImageWithTimeout(BIRD_URL)
-      ]);
-
+      const [bg, bird] = await Promise.all([ loadImageWithTimeout(BG_URL), loadImageWithTimeout(BIRD_URL) ]);
       bgImg   = bg   || buildFallbackBG();
       birdImg = bird || buildFallbackBird();
 
@@ -785,8 +764,6 @@
       checkOrientation();
       lastTs = performance.now();
       requestAnimationFrame(loop);
-
-      hideLoading();
 
       // Preload pipes (non-blocking)
       const promises = [];
@@ -802,31 +779,22 @@
       }
       Raw.bottoms = bottoms; Raw.tops = tops;
       rebuildStyles();
+
     } catch (_){
+      // Absolute fallback
       bgImg   = buildFallbackBG();
       birdImg = buildFallbackBird();
       forceToStartScreen();
       checkOrientation();
       lastTs = performance.now();
       requestAnimationFrame(loop);
+    } finally {
       hideLoading();
     }
   }
 
   window.addEventListener('error', hideLoading, {passive:true});
   window.addEventListener('unhandledrejection', hideLoading, {passive:true});
-
-  const PIPE_STYLES_CFG = [
-    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
-  ];
-
   gatedBoot();
 
 })(); // end IIFE
