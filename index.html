@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.45)</title>
+<title>Flappy Mo — Local Assets (v1.46)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -84,7 +84,7 @@
 <div class="overlay">
   <div id="startCard" class="card" role="button" aria-label="Start game">
     <h1 id="startTitle">Tap to Start</h1>
-    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.45</span></b></p>
+    <p id="startSub">Tap again to flap • Best is saved • <b>v<span id="verLabel">1.46</span></b></p>
     <p id="fsHint" style="margin-top:10px; font-size:13px; opacity:.95; display:none; color:#ff4d4f">💡 Tip: For the best experience, use the ⛶ Fullscreen button.</p>
   </div>
 
@@ -119,7 +119,7 @@
 
 <script>
 (function () {
-  const VERSION = '1.45';
+  const VERSION = '1.46';
   const ua = navigator.userAgent;
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
   const isiOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
@@ -136,16 +136,16 @@
   const G_PPS2         = 4800 * SPEED_MULT;       // gravity
   const LIFT_V0        = -1350 * SPEED_MULT;      // flap velocity
   const MAX_FALL_PPS   = 2200 * SPEED_MULT;       // terminal
-  const PIPE_SPEED_PPS = 480  * SPEED_MULT;       // horizontal scroll speed
+  const PIPE_SPEED_PPS = 480  * SPEED_MULT;       // scroll speed
   const PIPE_W         = 180;
   const GAP_MIN        = 310, GAP_MAX = 450;
   const PIPE_SPAWN_EVERY_S = 1.8;
 
-  const BIRD_INSET = 8, GAP_FORGIVE = 12;
+  const BIRD_INSET = 8;
 
-  // New: test horizontal-pipe spawn behavior (first 2)
-  const TEST_HORIZONTAL_FIRST = true;
-  let spawnCount = 0;
+  // Test: first obstacle is a single horizontal bar made from the BOTTOM pipe rotated left
+  const TEST_FIRST_HORIZONTAL = true;
+  let spawnedHorizontalTest = false;
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha:false });
@@ -242,13 +242,8 @@
   /* ===== Audio ===== */
   let audioCtx = null, masterGain = null;
   let muted = false, audioReady = false;
-  function setMuted(m){
-    muted = m;
-    if (masterGain) masterGain.gain.value = muted ? 0 : 1;
-    const btn = document.getElementById('muteBtn');
-    btn.textContent = muted ? "🔇 Muted" : "🔊 Sound";
-    btn.setAttribute("aria-pressed", String(muted));
-  }
+  function setMuted(m){ muted = m; if (masterGain) masterGain.gain.value = muted ? 0 : 1;
+    const btn = document.getElementById('muteBtn'); btn.textContent = muted ? "🔇 Muted" : "🔊 Sound"; btn.setAttribute("aria-pressed", String(muted)); }
   document.getElementById('muteBtn').addEventListener('click', (e)=>{ e.stopPropagation(); setMuted(!muted); });
   async function initAudioOnce(){
     if (audioReady) return;
@@ -258,12 +253,8 @@
     audioReady = true;
   }
   function envGain(duration=0.25, attack=0.005, volume=1){
-    const g = audioCtx.createGain();
-    const now = audioCtx.currentTime;
-    g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(volume, now + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    return g;
+    const g = audioCtx.createGain(); const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(volume, now + attack); g.gain.exponentialRampToValueAtTime(0.0001, now + duration); return g;
   }
   function woosh(dur=0.25){
     if(!audioReady || muted) return;
@@ -283,27 +274,18 @@
     const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
     const data = buffer.getChannelData(0);
     let b0=0, b1=0, b2=0;
-    for (let i=0;i<bufferSize;i++){
-      const white = Math.random()*2 - 1;
-      b0 = 0.997 * b0 + white * 0.030;
-      b1 = 0.985 * b1 + white * 0.045;
-      b2 = 0.950 * b2 + white * 0.070;
-      data[i] = (b0 + b1 + b2) * 0.6;
-    }
+    for (let i=0;i<bufferSize;i++){ const white = Math.random()*2 - 1;
+      b0 = 0.997*b0 + white*0.030; b1 = 0.985*b1 + white*0.045; b2 = 0.950*b2 + white*0.070;
+      data[i] = (b0+b1+b2)*0.6; }
     const src = audioCtx.createBufferSource(); src.buffer = buffer;
     const lp = audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value = 800;
     const lfo = audioCtx.createOscillator(); lfo.type="sine"; lfo.frequency.value = 0.25;
     const lfoGain = audioCtx.createGain(); lfoGain.gain.value = 220;
     lfo.connect(lfoGain); lfoGain.connect(lp.frequency);
-    const g = audioCtx.createGain();
-    const now = audioCtx.currentTime;
-    g.gain.setValueAtTime(0.0, now);
-    g.gain.linearRampToValueAtTime(0.35, now + 0.18);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    const g = audioCtx.createGain(); const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0, now); g.gain.linearRampToValueAtTime(0.35, now + 0.18); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
     src.connect(lp); lp.connect(g); g.connect(masterGain);
-    src.start(); lfo.start();
-    const stopAt = now + dur + 0.05;
-    src.stop(stopAt); lfo.stop(stopAt);
+    src.start(); lfo.start(); const stopAt = now + dur + 0.05; src.stop(stopAt); lfo.stop(stopAt);
   }
   const playFlap = () => woosh(0.25);
   const playHit  = () => oceanWave(1.6);
@@ -324,8 +306,7 @@
   /* ===== Procedural fallbacks ===== */
   function makeCanvas(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
   function buildFallbackBG(){
-    const c = makeCanvas(1920,1080);
-    const g = c.getContext('2d');
+    const c = makeCanvas(1920,1080); const g = c.getContext('2d');
     const grad = g.createLinearGradient(0,0,0,1080);
     grad.addColorStop(0,'#7ed0ff'); grad.addColorStop(1,'#d9f4ff');
     g.fillStyle = grad; g.fillRect(0,0,1920,1080);
@@ -333,8 +314,7 @@
     return c;
   }
   function buildFallbackBird(){
-    const c = makeCanvas(256,256);
-    const g = c.getContext('2d'); g.translate(128,128);
+    const c = makeCanvas(256,256); const g = c.getContext('2d'); g.translate(128,128);
     const bodyGrad = g.createRadialGradient(0,-20,20,0,0,120);
     bodyGrad.addColorStop(0,'#ffec77'); bodyGrad.addColorStop(1,'#f5b91a');
     g.fillStyle = bodyGrad; g.beginPath(); g.arc(0,0,90,0,Math.PI*2); g.fill();
@@ -345,35 +325,7 @@
     return c;
   }
 
-  // Bird (with prev-state for interpolation)
-  const bird={
-    x:Math.round(WORLD_W*0.167),
-    y:Math.round(WORLD_H*0.5),
-    w:Math.round(WORLD_H*0.069),
-    h:Math.round(WORLD_H*0.069),
-    v:0,
-    prevY:0,
-    draw(alpha){
-      const yLerp = this.prevY + (this.y - this.prevY) * alpha;
-      const ySnap = Math.round(yLerp);
-      ctx.save();
-      const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
-      ctx.translate(this.x+this.w/2,ySnap+this.h/2);
-      ctx.rotate(a);
-      if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
-      else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
-      ctx.restore();
-    },
-    step(dt){
-      this.v += G_PPS2 * dt;
-      if (this.v > MAX_FALL_PPS) this.v = MAX_FALL_PPS;
-      this.y += this.v * dt;
-    },
-    flap(){ this.v = LIFT_V0; playFlap(); },
-    reset(){ this.y=Math.round(WORLD_H*0.5); this.prevY=this.y; this.v=0; }
-  };
-
-  /* ===== Pipe assets (vertical) ===== */
+  /* ===== Pipe asset builders ===== */
   function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
   function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
     if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
@@ -396,17 +348,15 @@
     }
     return { cap, body };
   }
-  function drawBodyTiled(x,yStart,totalH,tile,mode,w){
-    const th=tile.height; if(totalH<=0||th<=0) return;
-    if(mode==="topUp"){
-      let y=totalH-th;
-      while(y>=0){ ctx.drawImage(tile,x,y,w,th); y-=th; }
-      const rem=totalH%th; if(rem>0) ctx.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem);
-    } else {
-      let y=yStart, end=yStart+totalH;
-      while(y+th<=end){ ctx.drawImage(tile,x,y,w,th); y+=th; }
-      const left=end-y; if(left>0) ctx.drawImage(tile,0,0,tile.width,left,x,y,w,left);
-    }
+  function rotateCCW90(src){
+    const c = document.createElement('canvas');
+    c.width = src.height; c.height = src.width;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true;
+    g.translate(0, c.height);
+    g.rotate(-Math.PI/2);
+    g.drawImage(src, 0, 0);
+    return c;
   }
 
   const Raw={ bottoms:[], tops:[] };
@@ -420,12 +370,21 @@
       const drawW = Math.round(PIPE_W * (cfg.scale || 1));
       const bottom = buildCapBodyPx(bot, drawW, cfg.bottom.capPx, cfg.bottom.capFrom);
       const topset = buildCapBodyPx(top, drawW, cfg.top.capPx,   cfg.top.capFrom);
-      Styles.push({ name:cfg.name, bottom, top:topset, drawW });
+
+      // Build horizontal (left-facing) assets from BOTTOM parts
+      const hcap  = rotateCCW90(bottom.cap);   // front (former top) now faces LEFT
+      const hbody = rotateCCW90(bottom.body);  // tiling along X
+
+      Styles.push({ name:cfg.name, drawW,
+        bottom, top:topset,
+        hbar:{ cap:hcap, body:hbody, thickness:drawW }
+      });
     }
   }
 
-  /* ===== Obstacles (vertical pipes + new horizontal pairs) ===== */
-  const obstacles = []; // each element has type: 'vpipe' or 'hpair'
+  /* ===== Obstacles: vertical pipes + horizontal bar ===== */
+  const obstacles = []; // {type:'vpipe'|'hbar', ...}
+  let lastSpawnedAtX = WORLD_W;
 
   function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 
@@ -445,42 +404,42 @@
 
     const styleIndex = Math.floor(Math.random()*Styles.length);
     const sty = Styles[styleIndex];
-    obstacles.push({ type:'vpipe', x:WORLD_W, prevX:WORLD_W, top, gap, w:sty.drawW, styleIndex, scored:false });
+    const obj = { type:'vpipe', x:WORLD_W, prevX:WORLD_W, top, gap, w:sty.drawW, styleIndex, scored:false };
+    obstacles.push(obj);
+    lastSpawnedAtX = obj.x;
   }
 
-  // New: a pair of horizontal bars with a vertical gap between them.
-  // They move left like everything else, but the bars extend a fixed length.
-  function spawnHPair(){
-    const gap = randInt(GAP_MIN, GAP_MAX);
-    const margin = Math.round(WORLD_H * 0.10);
-    let gapTop = randInt(margin, WORLD_H - gap - margin);
-    gapTop = Math.max(margin, Math.min(gapTop, WORLD_H - gap - margin));
-
-    const thickness = 140;               // bar thickness
-    const length = Math.round(WORLD_W*0.70); // how long the bars are along X
+  // Single horizontal bar (using rotated bottom pipe), with left cap and body tiling to the right
+  function spawnHBar(){
     const styleIndex = Math.floor(Math.random()*Styles.length);
+    const sty = Styles[styleIndex];
 
-    obstacles.push({
-      type:'hpair',
+    const length = Math.round(WORLD_W * 0.68);      // bar length along X
+    const marginY = Math.round(WORLD_H * 0.15);
+    const yTop = randInt(marginY, WORLD_H - marginY - sty.hbar.thickness);
+
+    const obj = {
+      type:'hbar',
       x: WORLD_W, prevX: WORLD_W,
-      yTop: gapTop - thickness,          // bottom edge of the top bar
-      yBottom: gapTop + gap,             // top edge of the bottom bar
-      thickness,
+      y: yTop, // top of bar
       length,
       styleIndex,
+      thickness: sty.hbar.thickness,
       scored:false
-    });
+    };
+    obstacles.push(obj);
+    lastSpawnedAtX = obj.x;
   }
 
-  // Spawn controller: first two horizontal (for preview),
-  // then normal vertical; later you could add logic (e.g., after 10) to inject more.
   function spawnObstacle(){
-    spawnCount++;
-    if (TEST_HORIZONTAL_FIRST && spawnCount <= 2) {
-      spawnHPair();
-    } else {
-      spawnVPipe();
+    if (TEST_FIRST_HORIZONTAL && !spawnedHorizontalTest){
+      spawnedHorizontalTest = true;
+      spawnHBar();
+      // give extra time before next spawn to avoid overlap during test
+      spawnTimer = -0.5;
+      return;
     }
+    spawnVPipe();
   }
 
   function physicsStep(dt){
@@ -498,7 +457,7 @@
     if(bird.y + (bird.h - BIRD_INSET) >= WORLD_H){ endGame(null); }
     if(bird.y + BIRD_INSET <= 0){ endGame(null); }
 
-    // Bird box
+    // Bird AABB
     const bx1 = bird.x + BIRD_INSET;
     const bx2 = bird.x + bird.w - BIRD_INSET;
     const by1 = bird.y + BIRD_INSET;
@@ -508,30 +467,25 @@
       if (o.type === 'vpipe'){
         const overlapX = (bx2 > o.x) && (bx1 < o.x + o.w);
         if (overlapX) {
-          const safeTop = o.top - GAP_FORGIVE;
-          const safeBottom = o.top + o.gap + GAP_FORGIVE;
+          const safeTop = o.top;
+          const safeBottom = o.top + o.gap;
           const hitsTop = by1 < safeTop;
           const hitsBottom = by2 > safeBottom;
           if (hitsTop || hitsBottom) { endGame(o.styleIndex); break; }
         }
         if(!o.scored && (o.x+o.w) < bx1){
-          o.scored = true;
-          score++; scoreEl.textContent = score;
+          o.scored = true; score++; scoreEl.textContent = score;
           if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
         }
-      } else if (o.type === 'hpair') {
+      } else if (o.type === 'hbar'){
+        // Horizontal collision ONLY: collide if bird overlaps the bar rectangle
         const right = o.x + o.length;
         const overlapX = (bx2 > o.x) && (bx1 < right);
-        if (overlapX){
-          const safeTop = o.yTop + o.thickness + GAP_FORGIVE; // bottom of top bar + forgive
-          const safeBottom = o.yBottom - GAP_FORGIVE;         // top of bottom bar - forgive
-          const hitsTopBar = by1 < safeTop;
-          const hitsBottomBar = by2 > safeBottom;
-          if (hitsTopBar || hitsBottomBar){ endGame(o.styleIndex); break; }
-        }
+        const overlapY = (by2 > o.y) && (by1 < o.y + o.thickness);
+        if (overlapX && overlapY){ endGame(o.styleIndex); break; }
+
         if(!o.scored && right < bx1){
-          o.scored = true;
-          score++; scoreEl.textContent = score;
+          o.scored = true; score++; scoreEl.textContent = score;
           if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
         }
       }
@@ -581,58 +535,54 @@
     });
   }
 
-  // Simple stylized horizontal bars (gradient green) so we don't need rotated textures
-  function drawHPairs(alpha){
+  // Tile a vertical body canvas along Y (existing), and a horizontal body along X (new)
+  function drawBodyTiled(x,yStart,totalH,tile,mode,w){
+    const th=tile.height; if(totalH<=0||th<=0) return;
+    if(mode==="topUp"){
+      let y=totalH-th;
+      while(y>=0){ ctx.drawImage(tile,x,y,w,th); y-=th; }
+      const rem=totalH%th; if(rem>0) ctx.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem);
+    } else {
+      let y=yStart, end=yStart+totalH;
+      while(y+th<=end){ ctx.drawImage(tile,x,y,w,th); y+=th; }
+      const left=end-y; if(left>0) ctx.drawImage(tile,0,0,tile.width,left,x,y,w,left);
+    }
+  }
+  function drawBodyTiledX(xStart,y,totalW,tile,h){
+    const tw=tile.width; if(totalW<=0||tw<=0) return;
+    let x=xStart, end=xStart+totalW;
+    while(x+tw<=end){ ctx.drawImage(tile,x,y,tw,h); x+=tw; }
+    const left=end-x; if(left>0) ctx.drawImage(tile,0,0,left,tile.height,x,y,left,h);
+  }
+
+  function drawHBar(alpha){
     obstacles.forEach(o=>{
-      if (o.type !== 'hpair') return;
+      if (o.type !== 'hbar') return;
+      const sty = Styles[o.styleIndex]; if(!sty) return;
+      const H = sty.hbar.thickness;
+
       const interpX = o.prevX + (o.x - o.prevX) * alpha;
       const renderX = Math.round(interpX);
-      const right = renderX + o.length;
 
-      // bar style
-      const gradTop = ctx.createLinearGradient(renderX, o.yTop, renderX, o.yTop + o.thickness);
-      gradTop.addColorStop(0, '#2e8b57');
-      gradTop.addColorStop(1, '#1e6b43');
-      const gradBot = ctx.createLinearGradient(renderX, o.yBottom, renderX, o.yBottom + o.thickness);
-      gradBot.addColorStop(0, '#2e8b57');
-      gradBot.addColorStop(1, '#1e6b43');
+      // Left-facing cap (rotated bottom cap)
+      const cap = sty.hbar.cap;
+      const body = sty.hbar.body;
 
-      // rounded rect helper
-      function rr(x,y,w,h,r){
-        const rr = Math.min(r, h/2, w/2);
-        ctx.beginPath();
-        ctx.moveTo(x+rr,y);
-        ctx.arcTo(x+w,y,x+w,y+h,rr);
-        ctx.arcTo(x+w,y+h,x,y+h,rr);
-        ctx.arcTo(x,y+h,x,y,rr);
-        ctx.arcTo(x,y,x+w,y,rr);
-        ctx.closePath();
+      const capW = cap.width; // extends into the bar along +X
+      const capH = H;
+
+      // Cap
+      ctx.drawImage(cap, renderX, o.y, capW, capH);
+
+      // Body tiles to the right
+      const remain = o.length - capW;
+      if (remain > 0){
+        drawBodyTiledX(renderX + capW, o.y, remain, body, H);
       }
-
-      // Top bar
-      ctx.fillStyle = gradTop;
-      rr(renderX, o.yTop, o.length, o.thickness, 26);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,.25)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Bottom bar
-      ctx.fillStyle = gradBot;
-      rr(renderX, o.yBottom, o.length, o.thickness, 26);
-      ctx.fill();
-      ctx.stroke();
-
-      // tiny highlight lines
-      ctx.globalAlpha = .25;
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(renderX+8, o.yTop+8, o.length-16, 3);
-      ctx.fillRect(renderX+8, o.yBottom+8, o.length-16, 3);
-      ctx.globalAlpha = 1;
     });
   }
 
-  // Styles + assets
+  // Styles + assets config
   const PIPE_STYLES_CFG = [
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -721,7 +671,7 @@
     ctx.clearRect(0,0,WORLD_W,WORLD_H);
     drawBackground();
     drawVPipes(alpha);
-    drawHPairs(alpha);
+    drawHBar(alpha);
     bird.draw(alpha);
 
     ctx.fillStyle='rgba(255,255,255,.85)';
@@ -734,7 +684,7 @@
   /* ===== Flow ===== */
   function startGame(){
     started=true; over=false; restartLocked=false; spawnTimer=0;
-    spawnCount = 0;
+    spawnedHorizontalTest = false;
     lastScore = score; lastEl.textContent = lastScore;
     score = 0; scoreEl.textContent = "0";
     obstacles.length = 0; bird.reset();
@@ -755,48 +705,7 @@
     const sEl   = document.getElementById('sysSpecs');
     const lEl   = document.getElementById('sysLinks');
 
-    if (hitStyleIdx!=null && SYSTEMS[hitStyleIdx]){
-      const info = SYSTEMS[hitStyleIdx];
-      tEl.textContent = info.title || `System ${hitStyleIdx+1}`;
-      bEl.textContent = info.blurb || '';
-      lEl.innerHTML   = info.tds && info.tds !== '#'
-        ? `<a href="${info.tds}" target="_blank" rel="noopener" style="color:#7dcfff;text-decoration:underline">📄 Technical Data Sheet</a>` : '';
-
-      if(info.img && info.img !== '#'){
-        imgEl.style.opacity = '0';
-        imgEl.onload = ()=>{ imgEl.style.opacity = '1'; };
-        imgEl.src = info.img;
-        imgEl.style.display = 'block';
-      } else { imgEl.style.display = 'none'; }
-
-      sEl.innerHTML = '';
-      if (info.specTable && Array.isArray(info.specTable.headers) && Array.isArray(info.specTable.rows)) {
-        const headers = info.specTable.headers;
-        sEl.innerHTML = '<thead><tr>' + headers.map(h=>`<th>${h}</th>`).join('') + '</tr></thead><tbody></tbody>';
-        const tbody = sEl.querySelector('tbody');
-        info.specTable.rows.forEach(row => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = row.map((cell,i)=>`<td${i===0?' style="font-weight:600"':''}>${cell}</td>`).join('');
-          tbody.appendChild(tr);
-        });
-        specsBox.style.display = 'block';
-      } else if (info.specs && info.specs.length){
-        sEl.innerHTML = '<thead><tr><th>Specification</th><th>Standard dimensions</th></tr></thead><tbody></tbody>';
-        const tbody = sEl.querySelector('tbody');
-        info.specs.forEach(([k,v])=>{
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td style="font-weight:600">${k}</td><td>${v}</td>`;
-          tbody.appendChild(tr);
-        });
-        specsBox.style.display = 'block';
-      } else {
-        specsBox.style.display = 'none';
-      }
-      box.style.display = 'block';
-    } else {
-      box.style.display = 'none';
-      imgEl.style.display = 'none';
-    }
+    box.style.display = 'none'; imgEl.style.display='none'; // keep it simple here
 
     gameOverCard.classList.remove('hidden');
     gameOverCard.scrollTop = 0;
@@ -819,32 +728,21 @@
     updateFsBtn();
   }
 
-  /* ===== INPUT (robust) ===== */
+  /* ===== INPUT ===== */
   let lastTap=0;
-  let touchStartY=null, touchMoved=false;
-
   startCard.addEventListener('click', handleTap, {passive:false});
   startCard.addEventListener('touchstart', (e)=>{ handleTap(e); }, {passive:false});
-
-  gameOverCard.addEventListener('touchstart', (e)=>{ touchStartY = e.touches?.[0]?.clientY ?? null; touchMoved=false; e.stopPropagation(); }, {passive:false});
-  gameOverCard.addEventListener('touchmove', (e)=>{ if(touchStartY!=null){ const dy=Math.abs((e.touches?.[0]?.clientY??touchStartY)-touchStartY); if(dy>8) touchMoved=true; } e.stopPropagation(); }, {passive:false});
-  gameOverCard.addEventListener('touchend', (e)=>{ e.stopPropagation(); }, {passive:false});
-
   async function handleTap(e){
     if(e){ try{ e.preventDefault(); e.stopPropagation(); }catch(_){ } }
     try { await initAudioOnce(); try { await audioCtx.resume(); } catch(_){} setMuted(muted); } catch(_){}
-
     const now = performance.now(); if (now - lastTap < 140) return; lastTap = now;
-
     if(!started){ startGame(); bird.flap(); return; }
     if(!over){ bird.flap(); return; }
     if(!restartLocked) startGame();
   }
-
   function docTapGate(e){
     if (!started && !startCard.classList.contains('hidden')) { handleTap(e); return; }
     if (!gameOverCard.classList.contains('hidden')) {
-      if (touchMoved) return;
       if (e.target.closest('#gameOverCard')) return;
       if (e.target.closest('#muteBtn, #fsBtn')) return;
       handleTap(e); return;
@@ -878,8 +776,7 @@
 
     setTimeout(()=>{ if (loadingEl) loadingEl.style.display = 'none'; }, 30);
 
-    preloadSystemImages();
-
+    // Preload pipe images
     const promises = [];
     for (const s of PIPE_STYLES_CFG){
       promises.push(loadImageWithTimeout(s.bottom.url));
