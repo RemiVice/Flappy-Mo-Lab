@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46d-gapCounter)</title>
+<title>Flappy Mo — Local Assets (v1.46e-bottomGrace)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -120,7 +120,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.46d-gapCounter';
+  const VERSION = '1.46e-bottomGrace';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -137,23 +137,26 @@
   const PIPE_W    = 180;
   const GAP_MIN   = 310, GAP_MAX = 450;
 
-  // Distance-based vertical spacing (controls ALL verticals including the first)
-  const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.7); // tweak 1.8 to taste
-  const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;   // same control ✔
+  // Vertical spacing (all verticals incl. first)
+  const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);
+  const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;
 
-  // Horizontal challenge (unchanged)
+  // Horizontal challenge spacing
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);       // your 6% buffer
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // <- your 6% buffer
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
+
+  // Bottom grace: allow up to 75% of the bird to go below the bottom before Game Over
+  const BOTTOM_OVERLAP_FRAC = 0.75;
 
   let phase = 'VERTICALS';
   let bufferTime = 0;
   let challengeQueued = false;
   let verticalsPassed = 0;
 
-  // NEW: a single pixel-distance countdown for vertical spawns
+  // Vertical spawner: distance countdown
   let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
   let verticalsEnabled = true;
 
@@ -284,7 +287,7 @@
   }
   function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
   function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
-    if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
+    if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.imageSmoothingEnabled=true; g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
     const scale = drawW / (img.naturalWidth || img.width);
     const scaledH = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
     const capH    = Math.max(1, Math.round(capPxSrc * scale));
@@ -330,7 +333,7 @@
     }
   }
 
-  /* Systems (with your complete text/specs) */
+  /* Systems (unchanged content) */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -521,20 +524,16 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     if(phase==='VERTICALS'){
       if(verticalsEnabled){
-        // Decrease pixel countdown by how many pixels we scrolled this frame
         nextSpawnPx -= SCROLL_PPS * dt;
         while(nextSpawnPx <= 0){
-          // Spawn and schedule the next strictly by distance
           spawnVertical();
           nextSpawnPx += VERTICAL_X_GAP;
         }
       }
-
       if(challengeQueued){
-        // Pause verticals and start pre-buffer
         phase='PRE_BUFFER';
         verticalsEnabled=false;
-        nextSpawnPx = VERTICAL_X_GAP; // ensure clean spacing after we resume
+        nextSpawnPx = VERTICAL_X_GAP;
         bufferTime = BUFFER_PIXELS / SCROLL_PPS;
         challengeQueued=false;
       }
@@ -563,7 +562,6 @@ For high-density storage of relatively small and light items in tight quarters, 
       if(bufferTime<=0){
         phase='VERTICALS';
         verticalsEnabled=true;
-        // We already set nextSpawnPx to VERTICAL_X_GAP entering buffer, so spacing remains clean
       }
       return;
     }
@@ -635,8 +633,19 @@ For high-density storage of relatively small and light items in tight quarters, 
       if(started && !over){
         stepObstacles(STEP);
         bird.step(STEP);
-        if(bird.y+(bird.h-8)>=H) endGame(null);
-        if(bird.y+8<=0) endGame(null);
+
+        // === Edge collisions ===
+        const INSET = 8;
+        bird.yRender = bird.y; // base render for edge checks inside physics
+        // Top (unchanged)
+        if(bird.yRender - (bird.h/2 - INSET) <= 0){
+          endGame(null);
+        }
+        // Bottom with grace: allow up to 75% of bird height below the bottom
+        const bottomAllowancePx = bird.h * BOTTOM_OVERLAP_FRAC;
+        if(bird.yRender + (bird.h/2 - INSET) >= H + bottomAllowancePx){
+          endGame(null);
+        }
       }
       accumulator -= STEP;
     }
@@ -644,6 +653,7 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     ctx.clearRect(0,0,W,H);
     drawBackground();
+    // Interpolated render Y
     bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
     drawObstaclesInterpolated(leftover);
     bird.draw();
