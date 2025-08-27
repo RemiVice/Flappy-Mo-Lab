@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46h-exp)</title>
+<title>Flappy Mo — Local Assets (v1.46h2-exp)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -53,7 +53,7 @@
     font-weight:800; font-size:18px;
   }
 
-  /* Game Over system panel */
+  /* Game Over system panel visuals */
   #sysImg { max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px 0; display:none; opacity:0; transition:opacity .25s ease; }
   #sysInfoBox, #sysInfoBox * { color:#fff !important; }
   #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.25); padding:6px; text-align:left; color:#fff; }
@@ -86,6 +86,7 @@
     <p id="finalScoreP">Score: 0 • Best: 0</p>
     <p style="opacity:.85;font-size:12px;margin-top:8px">Tap <b>outside</b> this window to restart (after 1s)</p>
 
+    <!-- system info -->
     <img id="sysImg" alt="System image" />
     <div id="sysInfoBox" style="margin-top:12px; text-align:left; display:none">
       <div style="font-weight:800; font-size:16px; margin-bottom:6px">System: <span id="sysTitle">—</span></div>
@@ -110,7 +111,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.46h-exp';
+  const VERSION = '1.46h2-exp';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD space (never changes)
@@ -129,10 +130,16 @@
 
   const BIRD_INSET = 8, GAP_FORGIVE = 12;
 
-  // HORIZONTAL TEST CONFIG
-  const HORIZ_AT_START_COUNT = 3;       // number of horizontal bars to spawn at the very beginning (for testing)
-  const HORIZ_SPACING_X = Math.round(W * 0.25); // ~1/4 screen apart along X
-  const HORIZ_MARGIN_Y  = Math.round(H * 0.18); // keep bars within playable vertical range
+  /* PHASE CONTROL — prevents mixing */
+  // H_TEST: spawn ONLY horizontals (pre-queued), no verticals.
+  // SWITCH_BUFFER: no spawns; wait for buffer distance after last H.
+  // VERTICALS: spawn normal vertical pipes forever.
+  let phase = 'H_TEST';
+  const HORIZ_AT_START_COUNT = 3;                    // how many horizontals to test at start
+  const HORIZ_SPACING_X      = Math.round(W * 0.25); // forward spacing between bars
+  const HORIZ_MARGIN_Y       = Math.round(H * 0.18); // keep bars within playable vertical range
+  const SWITCH_BUFFER_PIXELS = Math.round(W * 0.5);  // at least half a screen gap before verticals begin
+  let lastHorizRightEdge = null;                      // x+w of last horizontal when queued
 
   // Canvas + fit via CSS only
   const canvas = document.getElementById('game');
@@ -233,7 +240,7 @@
     }
   }
 
-  /* ===== Systems info (your content) ===== */
+  /* ===== Systems info (unchanged content) ===== */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb:`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -337,7 +344,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   const obstacles=[];
   function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 
-  // Precompose vertical sprite (unchanged)
+  // Precompose vertical sprite
   function buildVerticalSprite(sty, top, gap, w){
     const c = document.createElement('canvas');
     c.width = w; c.height = H;
@@ -373,7 +380,7 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   // Precompose horizontal sprite by rotating the FULL bottom PNG 90° left
   function buildHorizontalSprite(sty){
-    const img = sty.botImg; // full original bottom image (never cut)
+    const img = sty.botImg;
     if(!img) return null;
     const drawW = sty.drawW;                   // bar thickness (height after rotation)
     const scale = drawW / (img.naturalWidth || img.width);
@@ -383,14 +390,14 @@ For high-density storage of relatively small and light items in tight quarters, 
     c.height = drawW;                          // bar thickness
     const g = c.getContext('2d'); g.imageSmoothingEnabled = true;
 
-    // rotate left (-90°), so the "front cap" of the bottom pipe faces LEFT
+    // rotate left (-90°) so the front cap faces LEFT
     g.translate(0, drawW);
     g.rotate(-Math.PI/2);
     g.drawImage(img, 0, 0, img.naturalWidth || img.width, img.naturalHeight || img.height, 0, 0, drawW, scaledH);
     return c;
   }
 
-  // Spawn vertical
+  // Spawners
   function spawnVertical(){
     if(!Styles.length) return;
     const margin = Math.round(H * 0.10);
@@ -413,7 +420,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     obstacles.push({ type:'V', x:W, top, gap, w, styleIndex, scored:false, sprite });
   }
 
-  // Spawn one horizontal bar at a given x
   function spawnHorizontalAt(xStart){
     if(!Styles.length) return;
     const styleIndex = Math.floor(Math.random()*Styles.length);
@@ -422,28 +428,58 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     const w = sprite.width;        // bar length across X
     const h = sty.drawW;           // bar thickness
-    const y = randInt(HORIZ_MARGIN_Y, H - HORIZ_MARGIN_Y - h);  // keep within safe vertical range
+    const y = randInt(HORIZ_MARGIN_Y, H - HORIZ_MARGIN_Y - h);
 
     obstacles.push({ type:'H', x:xStart, y, w, h, styleIndex, scored:false, sprite });
   }
 
-  // queue the initial horizontals (testing only)
   function queueInitialHorizontals(){
-    const firstX = W; // first just off the right edge
+    const firstX = W;
+    let lastRight = 0;
     for(let i=0;i<HORIZ_AT_START_COUNT;i++){
-      const x = firstX + i * (HORIZ_SPACING_X + 300); // ensure they don't overlap; extra 300px buffer
+      const x = (i===0? firstX : lastRight + HORIZ_SPACING_X);
       spawnHorizontalAt(x);
+      const last = obstacles[obstacles.length-1];
+      lastRight = last.x + last.w;
+    }
+    lastHorizRightEdge = lastRight;
+  }
+
+  // movement + spawning per phase
+  function stepObstacles(dt){
+    // Move all
+    for(const o of obstacles){ o.x -= SCROLL_PPS * dt; }
+    // Cleanup offscreen
+    for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x + obstacles[i].w <= 0) obstacles.splice(i,1);
+
+    if (phase === 'H_TEST') {
+      // Do not spawn verticals here.
+      // When no horizontals remain on-screen, switch to buffer phase.
+      if (obstacles.findIndex(o=>o.type==='H') === -1) {
+        phase = 'SWITCH_BUFFER';
+        // Prepare a timer based on pixels -> seconds
+        switchBufferTime = SWITCH_BUFFER_PIXELS / SCROLL_PPS;
+      }
+      return;
+    }
+
+    if (phase === 'SWITCH_BUFFER') {
+      // Count down in seconds; no spawns of any kind
+      switchBufferTime -= dt;
+      if (switchBufferTime <= 0) {
+        phase = 'VERTICALS';
+        spawnTimer = 0; // reset the vertical spawn timer for clean cadence
+      }
+      return;
+    }
+
+    if (phase === 'VERTICALS') {
+      // Normal vertical cadence
+      spawnTimer += dt * SPEED_MULT;
+      while (spawnTimer >= PIPE_SPAWN_EVERY_S) { spawnVertical(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
     }
   }
-
-  function stepObstacles(dt){
-    // regular timed spawns only for verticals (horizontals are pre-queued)
-    spawnTimer += dt * SPEED_MULT;
-    while (spawnTimer >= PIPE_SPAWN_EVERY_S) { spawnVertical(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
-
-    for(const o of obstacles){ o.x -= SCROLL_PPS * dt; }
-    for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x + obstacles[i].w <= 0) obstacles.splice(i,1);
-  }
+  let switchBufferTime = 0;
 
   function collideAndScore(leftoverTime){
     const bx1 = bird.x + BIRD_INSET;
@@ -467,7 +503,6 @@ For high-density storage of relatively small and light items in tight quarters, 
           o.scored = true; scoreUp();
         }
       } else {
-        // Horizontal collision is purely vertical overlap when bird overlaps in X
         const overlapX = (bx2 > xR) && (bx1 < xR + o.w);
         const overlapY = (by2 > o.y) && (by1 < o.y + o.h);
         if (overlapX && overlapY) { endGame(o.styleIndex); return true; }
@@ -565,10 +600,10 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     if(started && !over){ collideAndScore(leftover); }
 
-    // version tag (dark grey)
+    // version tag (black, bottom-left)
     ctx.fillStyle='rgba(0,0,0,.95)';
     ctx.font='700 16px Montserrat,system-ui';
-    ctx.fillText('v'+VERSION+' (experimental)', 14, H-14);
+    ctx.fillText('v'+VERSION, 14, H-14);
 
     requestAnimationFrame(loop);
   }
@@ -641,8 +676,11 @@ For high-density storage of relatively small and light items in tight quarters, 
     lastScore = score; lastEl.textContent = lastScore;
     score = 0; scoreEl.textContent = "0";
     obstacles.length = 0; bird.reset();
-    // queue initial horizontal bars for testing
-    if (HORIZ_AT_START_COUNT > 0) queueInitialHorizontals();
+
+    // PHASE: start with horizontals only
+    phase = (HORIZ_AT_START_COUNT>0) ? 'H_TEST' : 'VERTICALS';
+    if (phase==='H_TEST') queueInitialHorizontals();
+
     startCard.classList.add('hidden');
     gameOverCard.classList.add('hidden');
   }
@@ -665,7 +703,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   }, {passive:false, capture:true});
   document.addEventListener('keydown', (e)=>{ if(e.code==='Space'||e.key===' ') handleTap(e); }, {passive:false});
 
-  // Boot
+  // Boot (inline, no external script)
   (async () => {
     try{
       const [bg,birdPic] = await Promise.all([
@@ -693,10 +731,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   })();
 
-  /* ---- If later you want horizontals AFTER 10 verticals:
-     - Set HORIZ_AT_START_COUNT = 0
-     - Add a counter for spawned verticals; when it reaches 10, call spawnHorizontalAt(W) once.
-     - Keep at least ~W*0.5 distance before switching type. */
 })(); // IIFE
 </script>
 </body>
