@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46h2-exp)</title>
+<title>Flappy Mo — Local Assets (v1.46h3-exp)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,6 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* Fixed world canvas (1920x1080). Only CSS scale changes. */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -53,7 +52,6 @@
     font-weight:800; font-size:18px;
   }
 
-  /* Game Over system panel visuals */
   #sysImg { max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px 0; display:none; opacity:0; transition:opacity .25s ease; }
   #sysInfoBox, #sysInfoBox * { color:#fff !important; }
   #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.25); padding:6px; text-align:left; color:#fff; }
@@ -65,7 +63,6 @@
 
 <canvas id="game" width="1920" height="1080"></canvas>
 
-<!-- HUD -->
 <div class="hud">
   <div class="badge">Score: <span id="scoreVal">0</span></div>
   <div class="badge">Last:  <span id="lastVal">0</span></div>
@@ -74,7 +71,6 @@
 <button id="muteBtn" class="mute-btn" aria-pressed="false" title="Toggle sound">🔊 Sound</button>
 <button id="fsBtn" class="fs-btn" title="Fullscreen">⛶ Fullscreen</button>
 
-<!-- Overlays -->
 <div class="overlay">
   <div id="startCard" class="card">
     <h1>Tap to Start</h1>
@@ -86,7 +82,6 @@
     <p id="finalScoreP">Score: 0 • Best: 0</p>
     <p style="opacity:.85;font-size:12px;margin-top:8px">Tap <b>outside</b> this window to restart (after 1s)</p>
 
-    <!-- system info -->
     <img id="sysImg" alt="System image" />
     <div id="sysInfoBox" style="margin-top:12px; text-align:left; display:none">
       <div style="font-weight:800; font-size:16px; margin-bottom:6px">System: <span id="sysTitle">—</span></div>
@@ -99,7 +94,6 @@
   </div>
 </div>
 
-<!-- Landscape-only blocker -->
 <div id="rotBlock" class="rot-overlay">
   <div class="rot-box">
     <h2>Rotate your device</h2>
@@ -111,13 +105,13 @@
 
 <script>
 (() => {
-  const VERSION = '1.46h2-exp';
+  const VERSION = '1.46h3-exp';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-  // WORLD space (never changes)
+  // WORLD space
   const W = 1920, H = 1080;
 
-  // Physics base
+  // Physics
   const SPEED_MULT = isMobile ? 1.40 : 1.50;
   const G         = 4800 * SPEED_MULT;
   const LIFT_V0   = -1350 * SPEED_MULT;
@@ -130,30 +124,28 @@
 
   const BIRD_INSET = 8, GAP_FORGIVE = 12;
 
-  /* PHASE CONTROL — prevents mixing */
-  // H_TEST: spawn ONLY horizontals (pre-queued), no verticals.
-  // SWITCH_BUFFER: no spawns; wait for buffer distance after last H.
-  // VERTICALS: spawn normal vertical pipes forever.
+  /* PHASE CONTROL (no mixing) */
   let phase = 'H_TEST';
-  const HORIZ_AT_START_COUNT = 3;                    // how many horizontals to test at start
-  const HORIZ_SPACING_X      = Math.round(W * 0.25); // forward spacing between bars
-  const HORIZ_MARGIN_Y       = Math.round(H * 0.18); // keep bars within playable vertical range
-  const SWITCH_BUFFER_PIXELS = Math.round(W * 0.5);  // at least half a screen gap before verticals begin
-  let lastHorizRightEdge = null;                      // x+w of last horizontal when queued
+  const HORIZ_AT_START_COUNT = 3;              // keep same spacing between the 3 bars
+  const HORIZ_SPACING_X      = Math.round(W * 0.25);
+  const HORIZ_MARGIN_Y       = Math.round(H * 0.18);
+  const SWITCH_BUFFER_PIXELS = Math.round(W * 0.2); // ⬅ shorter buffer before verticals
+  let lastHorizRightEdge = null;
+  let switchBufferTime = 0;
 
-  // Canvas + fit via CSS only
+  // Canvas fit
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha:false });
   ctx.imageSmoothingEnabled = true;
   function fit(){ const vw=innerWidth, vh=Math.round(visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
   addEventListener('resize', fit, {passive:true}); visualViewport&&visualViewport.addEventListener('resize', fit, {passive:true}); fit();
 
-  // Orientation gate
+  // Orientation
   const rotBlock = document.getElementById('rotBlock');
   function checkOrientation(){ rotBlock.classList.toggle('show', innerWidth<innerHeight); }
   addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
-  // UI refs
+  // UI
   const scoreEl = document.getElementById('scoreVal');
   const lastEl  = document.getElementById('lastVal');
   const bestEl  = document.getElementById('bestVal');
@@ -172,7 +164,7 @@
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
   let spawnTimer = 0;
 
-  // Audio (minimal, safe)
+  // Audio
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
   function setMuted(m){ muted=m; if(masterGain) masterGain.gain.value = muted?0:1; const b=document.getElementById('muteBtn'); b.textContent = muted?"🔇 Muted":"🔊 Sound"; b.setAttribute("aria-pressed", String(muted)); }
   document.getElementById('muteBtn').addEventListener('click', (e)=>{ e.stopPropagation(); setMuted(!muted); });
@@ -180,7 +172,7 @@
   function woosh(d=.25){ if(!audioReady||muted) return; const n=Math.max(1,audioCtx.sampleRate*d); const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate); const data=buf.getChannelData(0); for(let i=0;i<n;i++) data[i]=(Math.random()*2-1)*0.3; const src=audioCtx.createBufferSource(); src.buffer=buf; const lp=audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=1200; const g=audioCtx.createGain(); const t=audioCtx.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.4,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+d); src.connect(lp); lp.connect(g); g.connect(masterGain); src.start(); src.stop(t+d+0.05); }
   const playFlap = ()=>woosh(.25);
 
-  // Image helpers
+  // Assets helpers
   function loadImageWithTimeout(src, timeoutMs=6000){
     return new Promise((resolve) => {
       if(!src){ resolve(null); return; }
@@ -215,7 +207,7 @@
     return { cap, body };
   }
 
-  // Pipes config + styles
+  // Styles
   const PIPE_STYLES_CFG = [
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -240,449 +232,237 @@
     }
   }
 
-  /* ===== Systems info (unchanged content) ===== */
+  /* Systems info (unchanged) */
   const SYSTEMS = [
-    { title: "EATNASTAK (DOUBLE FACE)",
-      blurb:`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
+    { title:"EATNASTAK (DOUBLE FACE)", blurb:`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
 offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding
 your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized
-library management.`,
-      img:"assets/pipe1.png", tds:"#",
+library management.`, img:"assets/pipe1.png", tds:"#",
       specHeaders:["Specification","Standard Dimensions"],
-      specs:[
-        ["Width","24, 30, 36\""],
-        ["Depth","7, 8, 9, 10, 11, 12, 13, 14, 15, 16\""],
-        ["Height","30, 31, …, 108\""],
-        ["Shelf Load Capacity","Up to 50 psf"]
-      ]},
-    { title:"SMARTSHELF (FIXED, FULL DEPTH)",
-      blurb:"Montel's patented SmartShelf is the most versatile storage shelving system available today. This innovative 4-post shelving offers complete flexibility, accommodating items of all shapes and sizes. It is also designed for easy assembly and reconfiguration.",
-      img:"assets/pipe2.png", tds:"#",
+      specs:[["Width","24, 30, 36\""],["Depth","7, 8, 9, 10, 11, 12, 13, 14, 15, 16\""],["Height","30, 31, …, 108\""],["Shelf Load Capacity","Up to 50 psf"]]},
+    { title:"SMARTSHELF (FIXED, FULL DEPTH)", blurb:"Montel's patented SmartShelf is the most versatile storage shelving system available today. This innovative 4-post shelving offers complete flexibility, accommodating items of all shapes and sizes. It is also designed for easy assembly and reconfiguration.", img:"assets/pipe2.png", tds:"#",
       specHeaders:["Specification","Standard Dimensions"],
-      specs:[
-        ["Width","24, 30, 36, 1M, 42, 48, 54\""],
-        ["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],
-        ["Height","30, 31, …, 120\""],
-        ["Frame Load Capacity","Up to 2,500 lbs per frame"],
-        ["Shelf Load Capacity","Up to 500 lbs per shelf"]
-      ]},
-    { title:"4D Wide Span",
-      blurb:"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease. Engineered for strength and versatility, its robust beams support direct item placement, while optional drop panels transform the structure into sturdy shelving. For enhanced functionality, 4D frames seamlessly integrate with SmartShelf 4-Post accessories, delivering unmatched adaptability to meet your storage needs.",
-      img:"assets/pipe3.png", tds:"#",
+      specs:[["Width","24, 30, 36, 1M, 42, 48, 54\""],["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],["Height","30, 31, …, 120\""],["Frame Load Capacity","Up to 2,500 lbs per frame"],["Shelf Load Capacity","Up to 500 lbs per shelf"]]},
+    { title:"4D Wide Span", blurb:"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease. Engineered for strength and versatility, its robust beams support direct item placement, while optional drop panels transform the structure into sturdy shelving. For enhanced functionality, 4D frames seamlessly integrate with SmartShelf 4-Post accessories, delivering unmatched adaptability to meet your storage needs.", img:"assets/pipe3.png", tds:"#",
       specHeaders:["Specification","Capacity"],
-      specs:[
-        ["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],
-        ["Load per Level","3\" Beam : 1,000lbs per pair of beam (454 kg)"],
-        ["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],
-        ["Height","4' to 8' (1.2 m to 2.4 m)"],
-        ["Depth","Up to 20' (6.1 m)"]
-      ]},
-    { title:"SmartSpace",
-      blurb:"Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects. Designed with efficiency in mind, the SmartSpace system ensures quick and hassle-free installation, helping you save time and reduce expenses. Choose between two tailored options, manual or mechanically assisted, to meet your unique storage requirements with ease and precision.",
-      img:"assets/pipe4.png", tds:"#",
+      specs:[["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],["Load per Level","3\" Beam : 1,000lbs per pair of beam (454 kg)"],["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],["Height","4' to 8' (1.2 m to 2.4 m)"],["Depth","Up to 20' (6.1 m)"]]},
+    { title:"SmartSpace", blurb:"Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects. Designed with efficiency in mind, the SmartSpace system ensures quick and hassle-free installation, helping you save time and reduce expenses. Choose between two tailored options, manual or mechanically assisted, to meet your unique storage requirements with ease and precision.", img:"assets/pipe4.png", tds:"#",
       specHeaders:["Specification","Capacity"],
-      specs:[
-        ["Section Load Capacity","2,000 lbs per section (907 kg)"],
-        ["Section Length","24\" to 48\" (0.61m - 1.2m)"],
-        ["Section Depth","Panels: 12\" to 48\" (0.3m - 1.2 m); Columns: 18\" to 48\" (0.5m - 1.2m)"],
-        ["Carriage Load Capacity","16,000 lbs per carriage (7270kg)"],
-        ["Carriage Length","Max 24' (7.3 m)"]
-      ]},
-    { title:"SmartGlide",
-      blurb:`Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system that leverages your available space to maximize storage efficiency. It’s an excellent alternative when space limitations prevent you from using one of our larger mobile systems.
+      specs:[["Section Load Capacity","2,000 lbs per section (907 kg)"],["Section Length","24\" to 48\" (0.61m - 1.2m)"],["Section Depth","Panels: 12\" to 48\" (0.3m - 1.2 m); Columns: 18\" to 48\" (0.5m - 1.2m)"],["Carriage Load Capacity","16,000 lbs per carriage (7270kg)"],["Carriage Length","Max 24' (7.3 m)"]]},
+    { title:"SmartGlide", blurb:`Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system that leverages your available space to maximize storage efficiency. It’s an excellent alternative when space limitations prevent you from using one of our larger mobile systems.
 
 APPLICATION:  Unlike other mobile systems, you do not have to open up an aisle to access your stored material. Just slide the system laterally to reach what you need. This allows you to make full use of your storage space without wasting a square inch.
 
-For high-density storage of relatively small and light items in tight quarters, such as files, boxes, medications, and parts, it's vastly superior to conventional filing and storage systems.`,
-      img:"assets/pipe5.png", tds:"#",
-      specHeaders:null, specs:[] },
-    { title:"GREENRAK",
-      blurb:"Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications. Its lightweight, rust-resistant, and simple design allows for easy installation, use, and maintenance.",
-      img:"assets/greenrak.png", tds:"#",
-      specTable:{ headers:["Specification","Section","Mobile"],
-        rows:[
-          ["Load","Max 2,400 lbs/section","Max 18,000 lbs/mobile"],
-          ["Depth","—","36”, 42”, 48”"],
-          ["Length","4’, 8’","Max 50’"]
-        ]}},
-    { title:"Mobilex",
-      blurb:"Montel's Mobilex mechanical-assist mobile storage systems provide your organization with the flexibility to customize high-density storage solutions to meet your unique needs. Its innovative mechanism allows for effortless access and mobilization of your items.",
-      img:"assets/pipe7.png", tds:"#",
-      specHeaders:["Specification","Capacity"],
-      specs:[
-        ["Load Capacity","1,000 lbs per linear foot (1 488kg/m)"],
-        ["Depth","3' to 45' (0.91m - 13.7m)"],
-        ["Length","15\" to 48\" (0.4m -2.4 m)"]
-      ]},
-    { title:"SAFERAK 32P & 60P",
-      blurb:"Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system. Designed for industrial environments, the SAFERAK® 32P & 60P can handle, respectively, an impressive load capacity of 32,000 lbs and 60,000 lbs per double rack section, optimizing storage efficiency and cutting costs. Embrace the future with smart factory technology, fully equipped for Industry 4.0 to boost your production efficiency and adaptability through seamless digital transformation.",
-      img:"assets/pipe8.png", tds:"#",
-      specTable:{ headers:["Specification","SAFERAK 32P","SAFERAK 60P"],
-        rows:[
-          ["Load per Double-Bay","32,000lbs (14 500 kg)","60,000lbs (27 200 kg)"],
-          ["Load per Carriage","256,000 lbs (116 000 kg)","480,000 lbs (217 600 kg)"],
-          ["Bay Depth","Up to 8' (2.4 m)","Up to 8' (2.4 m)"],
-          ["Bay Width","Up to 12' (3.6 m)","Up to 12' (3.6 m)"],
-          ["Carriage Length","Up to 100’ (30 m)","Up to 120’ (36 m)"],
-          ["Industrial Safeties","YES","YES"],
-          ["PLC","YES","YES"],
-          ["Touchscreen UI","YES","YES"],
-          ["Signal Strobe and Buzzers","YES","YES"],
-          ["VPN eWon Connectivity","YES","YES"],
-          ["Rear Controls","Optional","Optional"],
-          ["In-Aisle E-Stops","Optional","Optional"],
-          ["Illuminated E-Stops","Optional","Optional"]
-        ]}}
+For high-density storage of relatively small and light items in tight quarters, such as files, boxes, medications, and parts, it's vastly superior to conventional filing and storage systems.`, img:"assets/pipe5.png", tds:"#",
+      specHeaders:null, specs:[]},
+    { title:"GREENRAK", blurb:"Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications. Its lightweight, rust-resistant, and simple design allows for easy installation, use, and maintenance.", img:"assets/greenrak.png", tds:"#",
+      specTable:{headers:["Specification","Section","Mobile"], rows:[["Load","Max 2,400 lbs/section","Max 18,000 lbs/mobile"],["Depth","—","36”, 42”, 48”"],["Length","4’, 8’","Max 50’"]]}},
+    { title:"Mobilex", blurb:"Montel's Mobilex mechanical-assist mobile storage systems provide your organization with the flexibility to customize high-density storage solutions to meet your unique needs. Its innovative mechanism allows for effortless access and mobilization of your items.", img:"assets/pipe7.png", tds:"#",
+      specHeaders:["Specification","Capacity"], specs:[["Load Capacity","1,000 lbs per linear foot (1 488kg/m)"],["Depth","3' to 45' (0.91m - 13.7m)"],["Length","15\" to 48\" (0.4m -2.4 m)"]]},
+    { title:"SAFERAK 32P & 60P", blurb:"Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system. Designed for industrial environments, the SAFERAK® 32P & 60P can handle, respectively, an impressive load capacity of 32,000 lbs and 60,000 lbs per double rack section, optimizing storage efficiency and cutting costs. Embrace the future with smart factory technology, fully equipped for Industry 4.0 to boost your production efficiency and adaptability through seamless digital transformation.", img:"assets/pipe8.png", tds:"#",
+      specTable:{headers:["Specification","SAFERAK 32P","SAFERAK 60P"], rows:[["Load per Double-Bay","32,000lbs (14 500 kg)","60,000lbs (27 200 kg)"],["Load per Carriage","256,000 lbs (116 000 kg)","480,000 lbs (217 600 kg)"],["Bay Depth","Up to 8' (2.4 m)","Up to 8' (2.4 m)"],["Bay Width","Up to 12' (3.6 m)","Up to 12' (3.6 m)"],["Carriage Length","Up to 100’ (30 m)","Up to 120’ (36 m)"],["Industrial Safeties","YES","YES"],["PLC","YES","YES"],["Touchscreen UI","YES","YES"],["Signal Strobe and Buzzers","YES","YES"],["VPN eWon Connectivity","YES","YES"],["Rear Controls","Optional","Optional"],["In-Aisle E-Stops","Optional","Optional"],["Illuminated E-Stops","Optional","Optional"]]}}
   ];
-  /* ===== End Systems info ===== */
 
-  // ---------- Obstacles ----------
-  // Each obstacle: {type:'V'|'H', x, w, sprite, ...}
-  // V: {top, gap, styleIndex, scored}
-  // H: {y, h, styleIndex, scored}  // y=top of bar, h=thickness (drawW)
-
+  /* Obstacles */
   const obstacles=[];
-  function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+  const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  // Precompose vertical sprite
   function buildVerticalSprite(sty, top, gap, w){
-    const c = document.createElement('canvas');
-    c.width = w; c.height = H;
-    const g = c.getContext('2d'); g.imageSmoothingEnabled = true;
-
-    // Top
-    if (top>0){
-      const cap = sty.top.cap, body = sty.top.body;
-      const capH = Math.min(cap.height, top), bodyH = top - capH;
-      if (bodyH>0){
-        let y = top - capH - body.height;
-        while (y >= 0) { g.drawImage(body, 0, y, w, body.height); y -= body.height; }
-        const rem = (top - capH) % body.height;
-        if (rem > 0) g.drawImage(body, 0, body.height - rem, body.width, rem, 0, 0, w, rem);
-      }
-      g.drawImage(cap, 0, top - capH, w, capH);
+    const c=document.createElement('canvas'); c.width=w; c.height=H;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    if(top>0){ const cap=sty.top.cap, body=sty.top.body; const capH=Math.min(cap.height,top), bodyH=top-capH;
+      if(bodyH>0){ let y=top-capH-body.height; while(y>=0){ g.drawImage(body,0,y,w,body.height); y-=body.height; } const rem=(top-capH)%body.height; if(rem>0) g.drawImage(body,0,body.height-rem,body.width,rem,0,0,w,rem); }
+      g.drawImage(cap,0,top-capH,w,capH);
     }
-
-    // Bottom
-    const by = top + gap;
-    const bottomH = H - by;
-    if (bottomH>0){
-      const cap = sty.bottom.cap, body = sty.bottom.body;
-      const capH = Math.min(cap.height, bottomH);
-      g.drawImage(cap, 0, by, w, capH);
-      let y = by + capH, filled = 0, remain = bottomH - capH;
-      while (filled + body.height <= remain) { g.drawImage(body, 0, y, w, body.height); y += body.height; filled += body.height; }
-      const left = remain - filled;
-      if (left > 0) g.drawImage(body, 0, 0, body.width, left, 0, y, w, left);
+    const by=top+gap, bottomH=H-by;
+    if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH);
+      let y=by+capH, filled=0, remain=bottomH-capH; while(filled+body.height<=remain){ g.drawImage(body,0,y,w,body.height); y+=body.height; filled+=body.height; } const left=remain-filled; if(left>0) g.drawImage(body,0,0,body.width,left,0,y,w,left);
     }
     return c;
   }
 
-  // Precompose horizontal sprite by rotating the FULL bottom PNG 90° left
   function buildHorizontalSprite(sty){
-    const img = sty.botImg;
-    if(!img) return null;
-    const drawW = sty.drawW;                   // bar thickness (height after rotation)
-    const scale = drawW / (img.naturalWidth || img.width);
-    const scaledH = Math.max(1, Math.round((img.naturalHeight || img.height) * scale)); // final bar LENGTH
-    const c = document.createElement('canvas');
-    c.width = scaledH;                         // length along X after rotation
-    c.height = drawW;                          // bar thickness
-    const g = c.getContext('2d'); g.imageSmoothingEnabled = true;
-
-    // rotate left (-90°) so the front cap faces LEFT
-    g.translate(0, drawW);
-    g.rotate(-Math.PI/2);
-    g.drawImage(img, 0, 0, img.naturalWidth || img.width, img.naturalHeight || img.height, 0, 0, drawW, scaledH);
+    const img=sty.botImg; if(!img) return null;
+    const drawW=sty.drawW, scale=drawW/(img.naturalWidth||img.width);
+    const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+    const c=document.createElement('canvas'); c.width=scaledH; c.height=drawW;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    g.translate(0,drawW); g.rotate(-Math.PI/2);
+    g.drawImage(img,0,0,img.naturalWidth||img.width,img.naturalHeight||img.height,0,0,drawW,scaledH);
     return c;
   }
 
-  // Spawners
   function spawnVertical(){
     if(!Styles.length) return;
-    const margin = Math.round(H * 0.10);
-    const maxSection = Math.round(H * 0.45);
-    const minGapRequired = H - 2*maxSection - 2*margin;
-    const minGap = Math.max(GAP_MIN, Math.min(GAP_MAX, Math.max(0, Math.floor(minGapRequired))));
-    const gap = randInt(minGap, GAP_MAX);
-
-    let top = randInt(margin, H - gap - margin);
-    if (top > maxSection) top = maxSection;
-    let bottomH = H - (top + gap);
-    if (bottomH > maxSection) top = H - gap - maxSection;
-    top = Math.max(margin, Math.min(top, H - gap - margin));
-
-    const styleIndex = Math.floor(Math.random()*Styles.length);
-    const sty = Styles[styleIndex];
-    const w = sty.drawW;
-
-    const sprite = buildVerticalSprite(sty, top, gap, w);
-    obstacles.push({ type:'V', x:W, top, gap, w, styleIndex, scored:false, sprite });
+    const margin=Math.round(H*0.10), maxSection=Math.round(H*0.45);
+    const minGapRequired=H-2*maxSection-2*margin, minGap=Math.max(GAP_MIN,Math.min(GAP_MAX,Math.max(0,Math.floor(minGapRequired))));
+    const gap=randInt(minGap,GAP_MAX);
+    let top=randInt(margin,H-gap-margin); if(top>maxSection) top=maxSection;
+    let bottomH=H-(top+gap); if(bottomH>maxSection) top=H-gap-maxSection;
+    top=Math.max(margin,Math.min(top,H-gap-margin));
+    const styleIndex=Math.floor(Math.random()*Styles.length), sty=Styles[styleIndex], w=sty.drawW;
+    const sprite=buildVerticalSprite(sty,top,gap,w);
+    obstacles.push({type:'V',x:W,top,gap,w,styleIndex,scored:false,sprite});
   }
 
   function spawnHorizontalAt(xStart){
     if(!Styles.length) return;
-    const styleIndex = Math.floor(Math.random()*Styles.length);
-    const sty = Styles[styleIndex];
-    const sprite = buildHorizontalSprite(sty); if(!sprite) return;
-
-    const w = sprite.width;        // bar length across X
-    const h = sty.drawW;           // bar thickness
-    const y = randInt(HORIZ_MARGIN_Y, H - HORIZ_MARGIN_Y - h);
-
-    obstacles.push({ type:'H', x:xStart, y, w, h, styleIndex, scored:false, sprite });
+    const styleIndex=Math.floor(Math.random()*Styles.length), sty=Styles[styleIndex];
+    const sprite=buildHorizontalSprite(sty); if(!sprite) return;
+    const w=sprite.width, h=sty.drawW, y=randInt(HORIZ_MARGIN_Y,H-HORIZ_MARGIN_Y-h);
+    obstacles.push({type:'H',x:xStart,y,w,h,styleIndex,scored:false,sprite});
   }
 
   function queueInitialHorizontals(){
-    const firstX = W;
-    let lastRight = 0;
+    const firstX=W; let lastRight=0;
     for(let i=0;i<HORIZ_AT_START_COUNT;i++){
-      const x = (i===0? firstX : lastRight + HORIZ_SPACING_X);
+      const x=(i===0?firstX:lastRight+HORIZ_SPACING_X);
       spawnHorizontalAt(x);
-      const last = obstacles[obstacles.length-1];
-      lastRight = last.x + last.w;
+      const last=obstacles[obstacles.length-1]; lastRight=last.x+last.w;
     }
-    lastHorizRightEdge = lastRight;
+    lastHorizRightEdge=lastRight;
   }
 
-  // movement + spawning per phase
   function stepObstacles(dt){
-    // Move all
-    for(const o of obstacles){ o.x -= SCROLL_PPS * dt; }
-    // Cleanup offscreen
-    for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x + obstacles[i].w <= 0) obstacles.splice(i,1);
+    for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
+    for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x+obstacles[i].w<=0) obstacles.splice(i,1);
 
-    if (phase === 'H_TEST') {
-      // Do not spawn verticals here.
-      // When no horizontals remain on-screen, switch to buffer phase.
-      if (obstacles.findIndex(o=>o.type==='H') === -1) {
-        phase = 'SWITCH_BUFFER';
-        // Prepare a timer based on pixels -> seconds
-        switchBufferTime = SWITCH_BUFFER_PIXELS / SCROLL_PPS;
+    if(phase==='H_TEST'){
+      if(obstacles.findIndex(o=>o.type==='H')===-1){
+        phase='SWITCH_BUFFER';
+        switchBufferTime = SWITCH_BUFFER_PIXELS / SCROLL_PPS; // shorter gap now
       }
       return;
     }
-
-    if (phase === 'SWITCH_BUFFER') {
-      // Count down in seconds; no spawns of any kind
+    if(phase==='SWITCH_BUFFER'){
       switchBufferTime -= dt;
-      if (switchBufferTime <= 0) {
-        phase = 'VERTICALS';
-        spawnTimer = 0; // reset the vertical spawn timer for clean cadence
-      }
+      if(switchBufferTime<=0){ phase='VERTICALS'; spawnTimer=0; }
       return;
     }
-
-    if (phase === 'VERTICALS') {
-      // Normal vertical cadence
+    if(phase==='VERTICALS'){
       spawnTimer += dt * SPEED_MULT;
-      while (spawnTimer >= PIPE_SPAWN_EVERY_S) { spawnVertical(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
+      while(spawnTimer >= PIPE_SPAWN_EVERY_S){ spawnVertical(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
     }
   }
-  let switchBufferTime = 0;
 
-  function collideAndScore(leftoverTime){
-    const bx1 = bird.x + BIRD_INSET;
-    const bx2 = bird.x + bird.w - BIRD_INSET;
-    const by1 = bird.yRender - (bird.h/2 - BIRD_INSET);
-    const by2 = bird.yRender + (bird.h/2 - BIRD_INSET);
-
+  function collideAndScore(leftover){
+    const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
+    const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
     for(const o of obstacles){
-      const xR = o.x - SCROLL_PPS * leftoverTime;
-
-      if (o.type === 'V') {
-        const overlapX = (bx2 > xR) && (bx1 < xR + o.w);
-        if (overlapX) {
-          const safeTop = o.top - GAP_FORGIVE;
-          const safeBottom = o.top + o.gap + GAP_FORGIVE;
-          const hitsTop = by1 < safeTop;
-          const hitsBottom = by2 > safeBottom;
-          if (hitsTop || hitsBottom) { endGame(o.styleIndex); return true; }
+      const xR=o.x - SCROLL_PPS*leftover;
+      if(o.type==='V'){
+        const overlapX=(bx2>xR)&&(bx1<xR+o.w);
+        if(overlapX){
+          const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
+          if(by1<safeTop || by2>safeBottom){ endGame(o.styleIndex); return true; }
         }
-        if(!o.scored && (xR+o.w) < bx1){
-          o.scored = true; scoreUp();
-        }
+        if(!o.scored && (xR+o.w)<bx1){ o.scored=true; scoreUp(); }
       } else {
-        const overlapX = (bx2 > xR) && (bx1 < xR + o.w);
-        const overlapY = (by2 > o.y) && (by1 < o.y + o.h);
-        if (overlapX && overlapY) { endGame(o.styleIndex); return true; }
-        if(!o.scored && (xR+o.w) < bx1){
-          o.scored = true; scoreUp();
-        }
+        const overlapX=(bx2>xR)&&(bx1<xR+o.w), overlapY=(by2>o.y)&&(by1<o.y+o.h);
+        if(overlapX && overlapY){ endGame(o.styleIndex); return true; }
+        if(!o.scored && (xR+o.w)<bx1){ o.scored=true; scoreUp(); }
       }
     }
     return false;
   }
 
-  function drawObstaclesInterpolated(leftoverTime){
+  function drawObstaclesInterpolated(leftover){
     for(const o of obstacles){
-      const xR = o.x - SCROLL_PPS * leftoverTime;
-      if(o.sprite) ctx.drawImage(o.sprite, xR, (o.type==='H'? o.y : 0), o.w, (o.type==='H'? o.h : H));
+      const xR = o.x - SCROLL_PPS*leftover;
+      if(o.sprite) ctx.drawImage(o.sprite, xR, (o.type==='H'?o.y:0), o.w, (o.type==='H'?o.h:H));
     }
   }
 
-  function scoreUp(){
-    score++; scoreEl.textContent = score;
-    if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest', String(best)); }
-  }
+  function scoreUp(){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
 
-  // Drawing
+  // Background & bird
   let bgImg=null, birdImg=null;
   function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); } }
 
-  // Bird
   const bird={
-    x:Math.round(W*0.167),
-    y:Math.round(H*0.5),
-    w:Math.round(H*0.069),
-    h:Math.round(H*0.069),
-    v:0,
-    yRender:0,
-    draw(){
-      ctx.save();
-      const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
-      ctx.translate(this.x+this.w/2,this.yRender);
-      ctx.rotate(a);
-      if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
-      else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
-      ctx.restore();
-    },
-    step(dt){ this.v += G * dt; if (this.v > MAX_FALL) this.v = MAX_FALL; this.y += this.v * dt; },
-    flap(){ this.v = LIFT_V0; },
+    x:Math.round(W*0.167), y:Math.round(H*0.5),
+    w:Math.round(H*0.069), h:Math.round(H*0.069),
+    v:0, yRender:0,
+    draw(){ ctx.save(); const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5)); ctx.translate(this.x+this.w/2,this.yRender); ctx.rotate(a); if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); } else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);} ctx.restore(); },
+    step(dt){ this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
+    flap(){ this.v=LIFT_V0; },
     reset(){ this.y=Math.round(H*0.5); this.v=0; }
   };
 
-  // Adaptive semi-fixed timestep with interpolation (smooth 60 & hi-Hz)
-  let physicsHz = 120;               // default for 60 Hz panels
-  let STEP = 1/physicsHz;
-  const MAX_FRAME_DT = 0.12;
-  let accumulator = 0, lastTs = performance.now();
-
-  // Calibrate refresh rate from first frames
-  const samples=[]; const targetRates=[60,90,100,120,144,165,180,240];
-  function calibrate(dt){
-    if (samples.length<30){ samples.push(dt); return; }
-    const avg = samples.reduce((a,b)=>a+b,0)/samples.length;
-    const estHz = Math.round(1/avg);
-    let nearest = targetRates[0], bestDiff=1e9;
-    for(const r of targetRates){ const d=Math.abs(estHz - r); if(d<bestDiff){ bestDiff=d; nearest=r; } }
-    physicsHz = (nearest<=60)?120:Math.min(nearest,240);
-    STEP = 1/physicsHz;
-    samples.length=30;
-  }
+  // Semi-fixed timestep with interpolation
+  let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
+  const MAX_FRAME_DT=0.12, samples=[], targetRates=[60,90,100,120,144,165,180,240];
+  function calibrate(dt){ if(samples.length<30){ samples.push(dt); return; } const avg=samples.reduce((a,b)=>a+b,0)/samples.length; const estHz=Math.round(1/avg); let nearest=targetRates[0], diff=1e9; for(const r of targetRates){ const d=Math.abs(estHz-r); if(d<diff){ diff=d; nearest=r; } } physicsHz=(nearest<=60)?120:Math.min(nearest,240); STEP=1/physicsHz; samples.length=30; }
 
   function loop(ts){
-    let frameDt = (ts - lastTs) / 1000;
-    if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT;
-    if (frameDt < 0) frameDt = 0;
-    if (samples.length<30) calibrate(frameDt);
-    lastTs = ts;
-
+    let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; if(samples.length<30) calibrate(frameDt); lastTs=ts;
     accumulator += frameDt;
-    while (accumulator >= STEP) {
+    while(accumulator>=STEP){
       if(started && !over){
         stepObstacles(STEP);
         bird.step(STEP);
-        if(bird.y + (bird.h - BIRD_INSET) >= H) endGame(null);
-        if(bird.y + BIRD_INSET <= 0) endGame(null);
+        if(bird.y+(bird.h-BIRD_INSET)>=H) endGame(null);
+        if(bird.y+BIRD_INSET<=0) endGame(null);
       }
       accumulator -= STEP;
     }
-    let leftover = accumulator;
-    if (over) leftover = 0; // freeze after game over (no shake)
+    let leftover=over?0:accumulator;
 
-    // Render
     ctx.clearRect(0,0,W,H);
     drawBackground();
-    bird.yRender = bird.y + bird.v * leftover + (over ? 0 : 0.5 * G * leftover * leftover);
+    bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
     drawObstaclesInterpolated(leftover);
     bird.draw();
 
-    if(started && !over){ collideAndScore(leftover); }
+    if(started && !over) collideAndScore(leftover);
 
-    // version tag (black, bottom-left)
-    ctx.fillStyle='rgba(0,0,0,.95)';
-    ctx.font='700 16px Montserrat,system-ui';
-    ctx.fillText('v'+VERSION, 14, H-14);
-
+    ctx.fillStyle='rgba(0,0,0,.95)'; ctx.font='700 16px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14);
     requestAnimationFrame(loop);
   }
 
-  // Game Over system box
   function endGame(hitStyleIdx){
-    if(over) return;
-    over=true;
-    bird.v = 0;
+    if(over) return; over=true; bird.v=0;
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
 
-    const box   = document.getElementById('sysInfoBox');
-    const imgEl = document.getElementById('sysImg');
-    const tEl   = document.getElementById('sysTitle');
-    const bEl   = document.getElementById('sysBlurb');
-    const specsBox = document.getElementById('sysSpecsBox');
-    const sEl   = document.getElementById('sysSpecs');
-    const lEl   = document.getElementById('sysLinks');
+    const box=document.getElementById('sysInfoBox'), imgEl=document.getElementById('sysImg'), tEl=document.getElementById('sysTitle'), bEl=document.getElementById('sysBlurb'), specsBox=document.getElementById('sysSpecsBox'), sEl=document.getElementById('sysSpecs'), lEl=document.getElementById('sysLinks');
 
-    if (hitStyleIdx!=null && SYSTEMS[hitStyleIdx]){
-      const info = SYSTEMS[hitStyleIdx];
-      tEl.textContent = info.title || `System ${hitStyleIdx+1}`;
-      bEl.textContent = info.blurb || '';
-      lEl.innerHTML   = info.tds && info.tds !== '#'
-        ? `<a href="${info.tds}" target="_blank" rel="noopener" style="color:#7dcfff;text-decoration:underline">📄 Technical Data Sheet</a>` : '';
-
-      if(info.img && info.img !== '#'){
-        imgEl.style.opacity = '0';
-        imgEl.onload = ()=>{ imgEl.style.opacity = '1'; };
-        imgEl.src = info.img;
-        imgEl.style.display = 'block';
-      } else { imgEl.style.display = 'none'; }
-
-      sEl.innerHTML = '';
-      if (info.specTable && Array.isArray(info.specTable.headers) && Array.isArray(info.specTable.rows)) {
-        const headers = info.specTable.headers;
-        sEl.innerHTML = '<thead><tr>' + headers.map(h=>`<th>${h}</th>`).join('') + '</tr></thead><tbody></tbody>';
-        const tbody = sEl.querySelector('tbody');
-        info.specTable.rows.forEach(row => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = row.map((cell,i)=>`<td${i===0?' style="font-weight:600"':''}>${cell}</td>`).join('');
-          tbody.appendChild(tr);
-        });
-        specsBox.style.display = 'block';
-      } else if (info.specHeaders && info.specs && info.specs.length){
-        sEl.innerHTML = '<thead><tr>' + info.specHeaders.map(h=>`<th>${h}</th>`).join('') + '</tr></thead><tbody></tbody>';
-        const tbody = sEl.querySelector('tbody');
-        info.specs.forEach(([k,v])=>{
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td style="font-weight:600">${k}</td><td>${v}</td>`;
-          tbody.appendChild(tr);
-        });
-        specsBox.style.display = 'block';
-      } else {
-        specsBox.style.display = 'none';
-      }
-      box.style.display = 'block';
-    } else {
-      box.style.display = 'none';
-      imgEl.style.display = 'none';
-    }
+    if(hitStyleIdx!=null && SYSTEMS[hitStyleIdx]){
+      const info=SYSTEMS[hitStyleIdx];
+      tEl.textContent=info.title||`System ${hitStyleIdx+1}`;
+      bEl.textContent=info.blurb||'';
+      lEl.innerHTML = info.tds && info.tds!=='#' ? `<a href="${info.tds}" target="_blank" rel="noopener" style="color:#7dcfff;text-decoration:underline">📄 Technical Data Sheet</a>` : '';
+      if(info.img && info.img!=='#'){ imgEl.style.opacity='0'; imgEl.onload=()=>{ imgEl.style.opacity='1'; }; imgEl.src=info.img; imgEl.style.display='block'; } else { imgEl.style.display='none'; }
+      sEl.innerHTML='';
+      if(info.specTable && Array.isArray(info.specTable.headers) && Array.isArray(info.specTable.rows)){
+        const headers=info.specTable.headers;
+        sEl.innerHTML='<thead><tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody></tbody>';
+        const tbody=sEl.querySelector('tbody');
+        info.specTable.rows.forEach(row=>{ const tr=document.createElement('tr'); tr.innerHTML=row.map((cell,i)=>`<td${i===0?' style="font-weight:600"':''}>${cell}</td>`).join(''); tbody.appendChild(tr); });
+        specsBox.style.display='block';
+      } else if(info.specHeaders && info.specs && info.specs.length){
+        sEl.innerHTML='<thead><tr>'+info.specHeaders.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody></tbody>';
+        const tbody=sEl.querySelector('tbody');
+        info.specs.forEach(([k,v])=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td style="font-weight:600">${k}</td><td>${v}</td>`; tbody.appendChild(tr); });
+        specsBox.style.display='block';
+      } else { specsBox.style.display='none'; }
+      box.style.display='block';
+    } else { box.style.display='none'; imgEl.style.display='none'; }
 
     gameOverCard.classList.remove('hidden');
-    gameOverCard.scrollTop = 0; requestAnimationFrame(()=>{ gameOverCard.scrollTop = 0; });
-    restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
+    gameOverCard.scrollTop=0; requestAnimationFrame(()=>{ gameOverCard.scrollTop=0; });
+    restartLocked=true; setTimeout(()=>{ restartLocked=false; },1000);
   }
 
   function startGame(){
     started=true; over=false; restartLocked=false; spawnTimer=0;
-    lastScore = score; lastEl.textContent = lastScore;
-    score = 0; scoreEl.textContent = "0";
-    obstacles.length = 0; bird.reset();
+    lastScore=score; lastEl.textContent=lastScore;
+    score=0; scoreEl.textContent="0";
+    obstacles.length=0; bird.reset();
 
-    // PHASE: start with horizontals only
     phase = (HORIZ_AT_START_COUNT>0) ? 'H_TEST' : 'VERTICALS';
-    if (phase==='H_TEST') queueInitialHorizontals();
+    if(phase==='H_TEST') queueInitialHorizontals();
 
-    startCard.classList.add('hidden');
-    gameOverCard.classList.add('hidden');
+    startCard.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
 
   function handleTap(e){
@@ -703,7 +483,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   }, {passive:false, capture:true});
   document.addEventListener('keydown', (e)=>{ if(e.code==='Space'||e.key===' ') handleTap(e); }, {passive:false});
 
-  // Boot (inline, no external script)
+  // Boot
   (async () => {
     try{
       const [bg,birdPic] = await Promise.all([
@@ -712,26 +492,16 @@ For high-density storage of relatively small and light items in tight quarters, 
       ]);
       bgImg = bg || null; birdImg = birdPic || null;
 
-      const promises = [];
-      for (const s of PIPE_STYLES_CFG){
-        promises.push(loadImageWithTimeout(s.bottom.url));
-        promises.push(loadImageWithTimeout(s.top.url));
-      }
-      const results = await Promise.allSettled(promises);
-      const bottoms=[], tops=[];
-      for (let i=0;i<PIPE_STYLES_CFG.length;i++){
-        bottoms[i] = results[i*2]?.value || null;
-        tops[i]    = results[i*2+1]?.value || null;
-      }
-      Raw.bottoms = bottoms; Raw.tops = tops;
-      rebuildStyles();
+      const promises=[]; for (const s of PIPE_STYLES_CFG){ promises.push(loadImageWithTimeout(s.bottom.url)); promises.push(loadImageWithTimeout(s.top.url)); }
+      const results=await Promise.allSettled(promises);
+      const bottoms=[], tops=[]; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=results[i*2]?.value||null; tops[i]=results[i*2+1]?.value||null; }
+      Raw.bottoms=bottoms; Raw.tops=tops; rebuildStyles();
     } finally {
       document.getElementById('loadingOverlay').style.display='none';
       requestAnimationFrame(loop);
     }
   })();
-
-})(); // IIFE
+})();
 </script>
 </body>
 </html>
