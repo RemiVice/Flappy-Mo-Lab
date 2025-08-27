@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46c-unifiedGap)</title>
+<title>Flappy Mo — Local Assets (v1.46d-gapCounter)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -120,7 +120,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.46c-unifiedGap';
+  const VERSION = '1.46d-gapCounter';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -153,9 +153,9 @@
   let challengeQueued = false;
   let verticalsPassed = 0;
 
-  // Distance tracking for verticals
-  let distSinceLastVertical = 0;
-  let firstVerticalSpawned  = false;
+  // NEW: a single pixel-distance countdown for vertical spawns
+  let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
+  let verticalsEnabled = true;
 
   // Canvas fit
   const canvas = document.getElementById('game');
@@ -470,7 +470,8 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   function buildHorizontalSprite(sty){
     const img=sty.botImg; if(!img) return null;
-    const drawW=sty.drawW, scale=drawW/(img.naturalWidth||img.width);
+    const drawW=sty.drawW;
+    const scale=drawW/(img.naturalWidth||img.width);
     const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale)); // length
     const c=document.createElement('canvas'); c.width=scaledH; c.height=drawW;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
@@ -518,29 +519,23 @@ For high-density storage of relatively small and light items in tight quarters, 
     for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
     for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x+obstacles[i].w<=0) obstacles.splice(i,1);
 
-    // Distance accumulation for vertical spacing
-    distSinceLastVertical += SCROLL_PPS * dt;
-
     if(phase==='VERTICALS'){
-      // Spawn the very first vertical using the SAME spacing distance as the rest
-      if(!firstVerticalSpawned && obstacles.findIndex(o=>o.type==='V')===-1){
-        spawnVerticalAt(W + FIRST_VERTICAL_LEAD_PIXELS);
-        firstVerticalSpawned = true;
-        distSinceLastVertical = 0; // reset distance after first spawn
-        return;
-      }
-
-      // Spawn next verticals strictly by distance
-      while(distSinceLastVertical >= VERTICAL_X_GAP){
-        spawnVertical();
-        distSinceLastVertical -= VERTICAL_X_GAP;
+      if(verticalsEnabled){
+        // Decrease pixel countdown by how many pixels we scrolled this frame
+        nextSpawnPx -= SCROLL_PPS * dt;
+        while(nextSpawnPx <= 0){
+          // Spawn and schedule the next strictly by distance
+          spawnVertical();
+          nextSpawnPx += VERTICAL_X_GAP;
+        }
       }
 
       if(challengeQueued){
-        // Begin pre-buffer: pause vertical spawns during buffer
+        // Pause verticals and start pre-buffer
         phase='PRE_BUFFER';
+        verticalsEnabled=false;
+        nextSpawnPx = VERTICAL_X_GAP; // ensure clean spacing after we resume
         bufferTime = BUFFER_PIXELS / SCROLL_PPS;
-        distSinceLastVertical = 0;
         challengeQueued=false;
       }
       return;
@@ -567,7 +562,8 @@ For high-density storage of relatively small and light items in tight quarters, 
       bufferTime -= dt;
       if(bufferTime<=0){
         phase='VERTICALS';
-        distSinceLastVertical = 0; // restart spacing cleanly
+        verticalsEnabled=true;
+        // We already set nextSpawnPx to VERTICAL_X_GAP entering buffer, so spacing remains clean
       }
       return;
     }
@@ -705,8 +701,10 @@ For high-density storage of relatively small and light items in tight quarters, 
     phase='VERTICALS';
     bufferTime=0; challengeQueued=false;
     verticalsPassed=0;
-    firstVerticalSpawned=false;
-    distSinceLastVertical=0;
+
+    // reset distance countdown spawner
+    nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
+    verticalsEnabled = true;
 
     startCard.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
