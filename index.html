@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46-cycle)</title>
+<title>Flappy Mo — Local Assets (v1.46-cycle2)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -108,7 +108,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.46-cycle';
+  const VERSION = '1.46-cycle2';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -129,13 +129,11 @@
   const BIRD_INSET = 8, GAP_FORGIVE = 12;
 
   /* ---------- PHASE ENGINE ----------
-
-     VERTICALS  -> (after every 10 passed verticals) PRE_BUFFER
+     VERTICALS  -> (after each 10 passed verticals) PRE_BUFFER
      PRE_BUFFER -> H_CHALLENGE (spawn 3 horizontals)
      H_CHALLENGE-> POST_BUFFER
      POST_BUFFER-> VERTICALS (repeat)
-
-     No mixing of types at any time.
+     No mixing of types.
   -----------------------------------*/
   let phase = 'VERTICALS';
   let spawnTimer = 0;
@@ -144,10 +142,19 @@
   const CHALLENGE_BARS = 3;
   const HORIZ_SPACING_X = Math.round(W * 0.25); // spacing between the 3 bars
   const HORIZ_MARGIN_Y  = Math.round(H * 0.18); // keep bars away from top/bottom
-  const BUFFER_PIXELS   = Math.round(W * 0.2);  // 0.2 before & after the 3
-  let bufferTime = 0;                           // counts down in seconds
-  let challengeQueued = false;                  // prevent double queueing
-  let verticalsPassed = 0;                      // how many verticals the player has passed (scored)
+
+  // NEW: separate buffers + lead offset
+  const BUFFER_PRE_FRAC  = 0.30; // 30% width BEFORE horizontals
+  const BUFFER_POST_FRAC = 0.20; // 20% width AFTER horizontals
+  const HORIZ_LEAD_FRAC  = 0.10; // first bar starts 10% width off-screen
+
+  const BUFFER_PRE_PIXELS  = Math.round(W * BUFFER_PRE_FRAC);
+  const BUFFER_POST_PIXELS = Math.round(W * BUFFER_POST_FRAC);
+  const HORIZ_LEAD_PIXELS  = Math.round(W * HORIZ_LEAD_FRAC);
+
+  let bufferTime = 0;           // seconds remaining in current buffer
+  let challengeQueued = false;  // request to start a challenge after buffer
+  let verticalsPassed = 0;      // how many verticals were scored
 
   // Canvas fit
   const canvas = document.getElementById('game');
@@ -247,7 +254,7 @@
     }
   }
 
-  /* Systems (same content as before) */
+  /* Systems (unchanged content) */
   const SYSTEMS = [
     { title:"EATNASTAK (DOUBLE FACE)", blurb:`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
 offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding
@@ -260,7 +267,7 @@ library management.`, img:"assets/pipe1.png", tds:"#",
       specs:[["Width","24, 30, 36, 1M, 42, 48, 54\""],["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],["Height","30, 31, …, 120\""],["Frame Load Capacity","Up to 2,500 lbs per frame"],["Shelf Load Capacity","Up to 500 lbs per shelf"]]},
     { title:"4D Wide Span", blurb:"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease. Engineered for strength and versatility, its robust beams support direct item placement, while optional drop panels transform the structure into sturdy shelving. For enhanced functionality, 4D frames seamlessly integrate with SmartShelf 4-Post accessories, delivering unmatched adaptability to meet your storage needs.", img:"assets/pipe3.png", tds:"#",
       specHeaders:["Specification","Capacity"],
-      specs:[["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],["Load per Level","3\" Beam : 1,000lbs per pair of beam (454 kg)"],["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],["Height","4' to 8' (1.2 m to 2.4 m)"],["Depth","Up to 20' (6.1 m)"]]},
+      specs:[["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],["Load per Level","3\" Beam : 1,000lbs per pair of beam (454 kg)"],["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],["Height","4' to 8' (1.2 m - 2.4 m)"],["Depth","Up to 20' (6.1 m)"]]},
     { title:"SmartSpace", blurb:"Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects. Designed with efficiency in mind, the SmartSpace system ensures quick and hassle-free installation, helping you save time and reduce expenses. Choose between two tailored options, manual or mechanically assisted, to meet your unique storage requirements with ease and precision.", img:"assets/pipe4.png", tds:"#",
       specHeaders:["Specification","Capacity"],
       specs:[["Section Load Capacity","2,000 lbs per section (907 kg)"],["Section Length","24\" to 48\" (0.61m - 1.2m)"],["Section Depth","Panels: 12\" to 48\" (0.3m - 1.2 m); Columns: 18\" to 48\" (0.5m - 1.2m)"],["Carriage Load Capacity","16,000 lbs per carriage (7270kg)"],["Carriage Length","Max 24' (7.3 m)"]]},
@@ -312,7 +319,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   function buildHorizontalSprite(sty){
     const img=sty.botImg; if(!img) return null;
     const drawW=sty.drawW, scale=drawW/(img.naturalWidth||img.width);
-    const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale)); // final length
+    const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale)); // length
     const c=document.createElement('canvas'); c.width=scaledH; c.height=drawW;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
     g.translate(0,drawW); g.rotate(-Math.PI/2); // face left
@@ -342,7 +349,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   function spawnHorizontalChallenge(){
-    const firstX=W;
+    const firstX = W + HORIZ_LEAD_PIXELS; // push first bar further off-screen
     let lastRight=0;
     for(let i=0;i<CHALLENGE_BARS;i++){
       const x=(i===0?firstX:lastRight+HORIZ_SPACING_X);
@@ -353,19 +360,17 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   function stepObstacles(dt){
-    // Move
+    // Move & cleanup
     for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
-    // Cleanup
     for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x+obstacles[i].w<=0) obstacles.splice(i,1);
 
     // Phase logic
     if(phase==='VERTICALS'){
       spawnTimer += dt * SPEED_MULT;
       while(spawnTimer >= PIPE_SPAWN_EVERY_S){ spawnVertical(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
-      // If a challenge was queued (at every 10 verticals), switch to PRE_BUFFER when screen is clear enough:
       if(challengeQueued){
         phase='PRE_BUFFER';
-        bufferTime = BUFFER_PIXELS / SCROLL_PPS;
+        bufferTime = BUFFER_PRE_PIXELS / SCROLL_PPS; // 30% pre-gap
         challengeQueued=false;
       }
       return;
@@ -384,7 +389,7 @@ For high-density storage of relatively small and light items in tight quarters, 
       // wait until all horizontals are gone
       if(obstacles.findIndex(o=>o.type==='H')===-1){
         phase='POST_BUFFER';
-        bufferTime = BUFFER_PIXELS / SCROLL_PPS;
+        bufferTime = BUFFER_POST_PIXELS / SCROLL_PPS; // 20% post-gap
       }
       return;
     }
@@ -414,9 +419,8 @@ For high-density storage of relatively small and light items in tight quarters, 
         }
         if(!o.scored && (xR+o.w)<bx1){
           o.scored=true; scoreUp();
-          verticalsPassed++;                          // count verticals passed
-          if(verticalsPassed>0 && verticalsPassed%10===0){ // every multiple of 10
-            // Only queue if we're in pure verticals at the moment
+          verticalsPassed++;
+          if(verticalsPassed>0 && verticalsPassed%10===0){
             if(phase==='VERTICALS') challengeQueued=true;
           }
         }
@@ -467,7 +471,7 @@ For high-density storage of relatively small and light items in tight quarters, 
       }
       accumulator -= STEP;
     }
-    let leftover = over?0:accumulator;
+    const leftover = over?0:accumulator;
 
     ctx.clearRect(0,0,W,H);
     drawBackground();
@@ -523,8 +527,10 @@ For high-density storage of relatively small and light items in tight quarters, 
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
+
     phase='VERTICALS';
     bufferTime=0; challengeQueued=false; verticalsPassed=0;
+
     startCard.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
 
