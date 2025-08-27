@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46e-bottomGrace)</title>
+<title>Flappy Mo — Local Assets (v1.46f-graceBoth)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -120,7 +120,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.46e-bottomGrace';
+  const VERSION = '1.46f-graceBoth';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -141,15 +141,16 @@
   const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);
   const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;
 
-  // Horizontal challenge spacing
+  // Horizontal challenge spacing (after each 10 verticals)
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);  // <- your 6% buffer
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // your 6% buffer before/after horizontals
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
 
-  // Bottom grace: allow up to 75% of the bird to go below the bottom before Game Over
-  const BOTTOM_OVERLAP_FRAC = 0.75;
+  // Top & bottom grace: fraction of bird height allowed outside screen
+  const TOP_OVERLAP_FRAC    = 0.25; // 25% can go above
+  const BOTTOM_OVERLAP_FRAC = 0.75; // 75% can go below
 
   let phase = 'VERTICALS';
   let bufferTime = 0;
@@ -333,7 +334,7 @@
     }
   }
 
-  /* Systems (unchanged content) */
+  /* Systems (with your full content) */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -634,14 +635,17 @@ For high-density storage of relatively small and light items in tight quarters, 
         stepObstacles(STEP);
         bird.step(STEP);
 
-        // === Edge collisions ===
+        // === Edge collisions with grace ===
         const INSET = 8;
-        bird.yRender = bird.y; // base render for edge checks inside physics
-        // Top (unchanged)
-        if(bird.yRender - (bird.h/2 - INSET) <= 0){
+        bird.yRender = bird.y;
+
+        // Top: allow TOP_OVERLAP_FRAC of bird height above the screen
+        const topAllowancePx = bird.h * TOP_OVERLAP_FRAC;
+        if(bird.yRender - (bird.h/2 - INSET) <= -topAllowancePx){
           endGame(null);
         }
-        // Bottom with grace: allow up to 75% of bird height below the bottom
+
+        // Bottom: allow BOTTOM_OVERLAP_FRAC of bird height below the screen
         const bottomAllowancePx = bird.h * BOTTOM_OVERLAP_FRAC;
         if(bird.yRender + (bird.h/2 - INSET) >= H + bottomAllowancePx){
           endGame(null);
