@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46-sndOff+Vlead)</title>
+<title>Flappy Mo — Local Assets (v1.46b-distGap)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -52,7 +52,18 @@
     font-weight:800; font-size:18px;
   }
 
-  #sysImg { max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px 0; display:none; opacity:0; transition:opacity .25s ease; }
+  /* Centered system image */
+  #sysImg {
+    max-width:100%;
+    max-height:240px;
+    object-fit:contain;
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.1);
+    border-radius:10px;
+    margin:10px auto;           /* << centered */
+    display:none;
+    opacity:0; transition:opacity .25s ease;
+  }
   #sysInfoBox, #sysInfoBox * { color:#fff !important; }
   #sysBlurb { white-space:pre-line; }
   #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.25); padding:6px; text-align:left; color:#fff; }
@@ -109,7 +120,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.46-sndOff+Vlead';
+  const VERSION = '1.46b-distGap';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -125,32 +136,30 @@
   // Pipes
   const PIPE_W    = 180;
   const GAP_MIN   = 310, GAP_MAX = 450;
-  const PIPE_SPAWN_EVERY_S = 1.8;
 
-  const BIRD_INSET = 8, GAP_FORGIVE = 12;
+  // Your spacing choices
+  const FIRST_VERTICAL_LEAD_FRAC   = 0.20;                   // 20% lead before first vertical
+  const FIRST_VERTICAL_LEAD_PIXELS = Math.round(W * FIRST_VERTICAL_LEAD_FRAC);
 
-  /* ---------- PHASE ENGINE (verticals + optional horizontal challenge) ---------- */
+  // Distance-based vertical spacing (replaces time-based)
+  // This keeps on-screen spacing perfectly constant regardless of frame pacing.
+  const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);       // equals old 1.8s at current scroll speed
+
+  // Horizontal challenge (kept; not mixed with verticals)
+  const CHALLENGE_BARS   = 3;
+  const HORIZ_SPACING_X  = Math.round(W * 0.25);
+  const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
+  const BUFFER_PIXELS    = Math.round(W * 0.06);             // your 6% pre/post buffer
+  const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
+
   let phase = 'VERTICALS';
-  let spawnTimer = 0;
-
-  // Horizontal challenge config (kept; not forced at start in this build)
-  const CHALLENGE_BARS = 3;
-  const HORIZ_SPACING_X = Math.round(W * 0.25);
-  const HORIZ_MARGIN_Y  = Math.round(H * 0.18);
-
-  // Your preference: buffer both before & after horizontals = 6% width
-  const BUFFER_PIXELS = Math.round(W * 0.06);
-  const HORIZ_LEAD_PIXELS = Math.round(W * 0.08);
-
   let bufferTime = 0;
-  let postBuffer = false;
   let challengeQueued = false;
   let verticalsPassed = 0;
 
-  // NEW: give the **first vertical** extra space
-  const FIRST_VERTICAL_LEAD_FRAC = 0.20; // 20% screen width
-  const FIRST_VERTICAL_LEAD_PIXELS = Math.round(W * FIRST_VERTICAL_LEAD_FRAC);
-  let firstVerticalSpawned = false;
+  // Distance accumulators
+  let distSinceLastVertical = 0;
+  let firstVerticalSpawned  = false;
 
   // Canvas fit
   const canvas = document.getElementById('game');
@@ -262,7 +271,6 @@
 
   const playFlap = ()=> noiseWoosh(0.22, 1200, 0.35);
   const playHit  = ()=> hitWave(1.1);
-  // NOTE: no score sound anymore
 
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') unlockAudio(); }, {passive:true});
 
@@ -301,7 +309,7 @@
     return { cap, body };
   }
 
-  // Styles (8 pipe skins)
+  // Styles
   const PIPE_STYLES_CFG = [
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -326,7 +334,7 @@
     }
   }
 
-  /* ----------- SYSTEMS: full text & specs you provided ----------- */
+  /* Systems (full descriptions/specs preserved) */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -381,7 +389,7 @@ library management.`,
     { title: "SmartGlide",
       blurb: `Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system that leverages your available space to maximize storage efficiency. It’s an excellent alternative when space limitations prevent you from using one of our larger mobile systems.
 
-APPLICATION: \tUnlike other mobile systems, you do not have to open up an aisle to access your stored material. Just slide the system laterally to reach what you need. This allows you to make full use of your storage space without wasting a square inch.
+APPLICATION: 	Unlike other mobile systems, you do not have to open up an aisle to access your stored material. Just slide the system laterally to reach what you need. This allows you to make full use of your storage space without wasting a square inch.
 
 For high-density storage of relatively small and light items in tight quarters, such as files, boxes, medications, and parts, it's vastly superior to conventional filing and storage systems.`,
       img: "assets/pipe5.png", tds: "#",
@@ -487,7 +495,8 @@ For high-density storage of relatively small and light items in tight quarters, 
     const sprite=buildVerticalSprite(sty,top,gap,w);
     obstacles.push({type:'V',x:xPos,top,gap,w,styleIndex,scored:false,sprite});
   }
-  const spawnVertical = ()=>spawnVerticalAt(W);
+
+  function spawnVertical(){ spawnVerticalAt(W); }
 
   function spawnHorizontalAt(xStart){
     if(!Styles.length) return;
@@ -513,21 +522,29 @@ For high-density storage of relatively small and light items in tight quarters, 
     for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
     for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x+obstacles[i].w<=0) obstacles.splice(i,1);
 
-    // Ensure the FIRST vertical has a lead
-    if(phase==='VERTICALS' && !firstVerticalSpawned && obstacles.length===0){
-      spawnVerticalAt(W + FIRST_VERTICAL_LEAD_PIXELS);
-      firstVerticalSpawned = true;
-      return; // draw this frame; start normal cadence next frames
-    }
+    // Distance accumulation for vertical spacing
+    distSinceLastVertical += SCROLL_PPS * dt;
 
-    // Phase logic
     if(phase==='VERTICALS'){
-      spawnTimer += dt * SPEED_MULT;
-      while(spawnTimer >= PIPE_SPAWN_EVERY_S){ spawnVertical(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
+      // Ensure the very first vertical has a fixed lead
+      if(!firstVerticalSpawned && obstacles.findIndex(o=>o.type==='V')===-1){
+        spawnVerticalAt(W + FIRST_VERTICAL_LEAD_PIXELS);
+        firstVerticalSpawned = true;
+        distSinceLastVertical = 0; // reset distance after spawning
+        return;
+      }
+
+      // Spawn next vertical only after the exact horizontal distance has passed
+      while(distSinceLastVertical >= VERTICAL_X_GAP){
+        spawnVertical();
+        distSinceLastVertical -= VERTICAL_X_GAP;
+      }
+
       if(challengeQueued){
+        // Begin pre-buffer: skip spawns during buffer by resetting distance
         phase='PRE_BUFFER';
         bufferTime = BUFFER_PIXELS / SCROLL_PPS;
-        postBuffer = false;
+        distSinceLastVertical = 0;
         challengeQueued=false;
       }
       return;
@@ -546,7 +563,6 @@ For high-density storage of relatively small and light items in tight quarters, 
       if(obstacles.findIndex(o=>o.type==='H')===-1){
         phase='POST_BUFFER';
         bufferTime = BUFFER_PIXELS / SCROLL_PPS;
-        postBuffer = true;
       }
       return;
     }
@@ -555,8 +571,7 @@ For high-density storage of relatively small and light items in tight quarters, 
       bufferTime -= dt;
       if(bufferTime<=0){
         phase='VERTICALS';
-        spawnTimer=0;
-        postBuffer = false;
+        distSinceLastVertical = 0; // restart spacing cleanly
       }
       return;
     }
@@ -565,10 +580,10 @@ For high-density storage of relatively small and light items in tight quarters, 
   function scoreUp(){
     score++; scoreEl.textContent=score;
     if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
-    // (no score sound)
   }
 
   function collideAndScore(leftover){
+    const BIRD_INSET = 8, GAP_FORGIVE = 12;
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
     for(const o of obstacles){
@@ -612,11 +627,11 @@ For high-density storage of relatively small and light items in tight quarters, 
     v:0, yRender:0,
     draw(){ ctx.save(); const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5)); ctx.translate(this.x+this.w/2,this.yRender); ctx.rotate(a); if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); } else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);} ctx.restore(); },
     step(dt){ this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
-    flap(){ this.v=LIFT_V0; playFlap(); },
+    flap(){ this.v=LIFT_V0; noiseWoosh(0.22, 1200, 0.35); },
     reset(){ this.y=Math.round(H*0.5); this.v=0; }
   };
 
-  // Semi-fixed timestep + interpolation (smooth on 60/165Hz)
+  // Semi-fixed timestep + interpolation
   let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
   const MAX_FRAME_DT=0.12, samples=[], targetRates=[60,90,100,120,144,165,180,240];
   function calibrate(dt){ if(samples.length<30){ samples.push(dt); return; } const avg=samples.reduce((a,b)=>a+b,0)/samples.length; const estHz=Math.round(1/avg); let nearest=targetRates[0], diff=1e9; for(const r of targetRates){ const d=Math.abs(estHz-r); if(d<diff){ diff=d; nearest=r; } } physicsHz=(nearest<=60)?120:Math.min(nearest,240); STEP=1/physicsHz; samples.length=30; }
@@ -628,8 +643,8 @@ For high-density storage of relatively small and light items in tight quarters, 
       if(started && !over){
         stepObstacles(STEP);
         bird.step(STEP);
-        if(bird.y+(bird.h-BIRD_INSET)>=H) endGame(null);
-        if(bird.y+BIRD_INSET<=0) endGame(null);
+        if(bird.y+(bird.h-8)>=H) endGame(null);
+        if(bird.y+8<=0) endGame(null);
       }
       accumulator -= STEP;
     }
@@ -643,7 +658,7 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     if(started && !over) collideAndScore(leftover);
 
-    // version tag (bottom-left, dark)
+    // version tag (bottom-left)
     ctx.fillStyle='rgba(0,0,0,.95)';
     ctx.font='700 16px Montserrat,system-ui';
     ctx.fillText('v'+VERSION, 14, H-14);
@@ -685,14 +700,17 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   function startGame(){
-    started=true; over=false; restartLocked=false; spawnTimer=0;
+    started=true; over=false; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
 
+    // reset phases and spacing
     phase='VERTICALS';
-    bufferTime=0; postBuffer=false; challengeQueued=false; verticalsPassed=0;
+    bufferTime=0; challengeQueued=false;
+    verticalsPassed=0;
     firstVerticalSpawned=false;
+    distSinceLastVertical=0;
 
     startCard.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
