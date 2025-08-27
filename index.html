@@ -1,239 +1,317 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Flappy Mo — with Horizontal Pipes (Test)</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
-<style>
-  /* [Your original CSS here—unchanged] */
-  :root{ --glass:rgba(20,24,28,.80); --bg:#0b0d10; }
-  * { box-sizing: border-box; }
-  html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
-  body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
-  #game{ position:fixed; top:50%; left:50%; width:1920px; height:1080px; transform:translate(-50%, -50%) scale(1); transform-origin:center center; background:#000; touch-action:none; image-rendering:auto; border-radius:14px; border:1px solid rgba(255,255,255,.08); box-shadow:0 18px 50px rgba(0,0,0,.45); }
-  .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
-  .card{ pointer-events:auto; color:#fff; background:var(--glass); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:20px 22px; text-align:center; backdrop-filter:blur(6px); box-shadow:0 10px 30px rgba(0,0,0,.5); max-width:min(92vw,560px); max-height:calc(100vh - 64px); overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y; scroll-behavior:smooth; cursor:pointer; }
-  .hidden{ display:none }
-  .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
-  .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
-  .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:999 }
-  .rot-overlay.show{ display:flex }
-  .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
-  .mute-btn, .fs-btn{ position:fixed; z-index:13; pointer-events:auto; background:var(--glass); color:#fff; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
-  .mute-btn{ right:12px; top:12px; }
-  .fs-btn{ right:12px; bottom:12px; }
-  #loadingOverlay{ position:fixed; inset:0; display:grid; place-items:center; background:#0b0d10; color:#fff; z-index:2000; font-weight:800; font-size:18px; }
-  #sysImg { max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px 0; display:none; opacity:0; transition:opacity .25s ease; }
-  #sysInfoBox, #sysInfoBox * { color:#fff !important; }
-  #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.25); padding:6px; text-align:left; color:#fff; }
-  #sysSpecs th{ font-weight:800; }
-  #sysSpecs td:first-child{ font-weight:600; }
-</style>
+  <meta charset="UTF-8" />
+  <title>Flappy Mo — with Horizontal Pipes (Test)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{ --glass:rgba(20,24,28,.80); --bg:#0b0d10; }
+    * { box-sizing: border-box; }
+    html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
+    body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+    #game{ position:fixed; top:50%; left:50%; width:1920px; height:1080px; transform:translate(-50%, -50%) scale(1); transform-origin:center center; background:#000; touch-action:none; image-rendering:auto; border-radius:14px; border:1px solid rgba(255,255,255,.08); box-shadow:0 18px 50px rgba(0,0,0,.45); }
+    .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
+    .card{ pointer-events:auto; color:#fff; background:var(--glass); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:20px 22px; text-align:center; backdrop-filter:blur(6px); box-shadow:0 10px 30px rgba(0,0,0,.5); max-width:min(92vw,560px); max-height:calc(100vh - 64px); overflow:auto; -webkit-overflow-scrolling:touch; touch-action:pan-y; scroll-behavior:smooth; cursor:pointer; }
+    .hidden{ display:none }
+    .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
+    .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
+    .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:999 }
+    .rot-overlay.show{ display:flex }
+    .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
+    .mute-btn, .fs-btn{ position:fixed; z-index:13; pointer-events:auto; background:var(--glass); color:#fff; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
+    .mute-btn{ right:12px; top:12px; }
+    .fs-btn{ right:12px; bottom:12px; }
+    #loadingOverlay{ position:fixed; inset:0; display:grid; place-items:center; background:#0b0d10; color:#fff; z-index:2000; font-weight:800; font-size:18px; }
+    #sysImg { max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px 0; display:none; opacity:0; transition:opacity .25s ease; }
+    #sysInfoBox, #sysInfoBox * { color:#fff !important; }
+    #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.25); padding:6px; text-align:left; color:#fff; }
+    #sysSpecs th{ font-weight:800; }
+    #sysSpecs td:first-child{ font-weight:600; }
+  </style>
 </head>
 <body>
-<canvas id="game" width="1920" height="1080"></canvas>
-<div class="hud">
-  <div class="badge">Score: <span id="scoreVal">0</span></div>
-  <div class="badge">Last:  <span id="lastVal">0</span></div>
-  <div class="badge">Best:  <span id="bestVal">0</span></div>
-</div>
-<button id="muteBtn" class="mute-btn" aria-pressed="false" title="Toggle sound">🔊 Sound</button>
-<button id="fsBtn" class="fs-btn" title="Fullscreen">⛶ Fullscreen</button>
-<div class="overlay">
-  <div id="startCard" class="card">
-    <h1>Tap to Start</h1>
-    <p>Tap again to flap • Best is saved</p>
+  <canvas id="game" width="1920" height="1080"></canvas>
+  <div class="hud">
+    <div class="badge">Score: <span id="scoreVal">0</span></div>
+    <div class="badge">Last:  <span id="lastVal">0</span></div>
+    <div class="badge">Best:  <span id="bestVal">0</span></div>
   </div>
-  <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
-    <h1>Game Over</h1>
-    <p id="finalScoreP">Score: 0 • Best: 0</p>
-    <p style="opacity:.85;font-size:12px;margin-top:8px">Tap <b>outside</b> this window to restart (after 1s)</p>
-    <img id="sysImg" alt="System image" />
-    <div id="sysInfoBox" style="margin-top:12px; text-align:left; display:none">
-      <div style="font-weight:800; font-size:16px; margin-bottom:6px">System: <span id="sysTitle">—</span></div>
-      <div id="sysBlurb" style="opacity:.9; font-size:13px; margin-bottom:8px; white-space:pre-line">—</div>
-      <div id="sysSpecsBox" style="margin-top:10px; display:none">
-        <table id="sysSpecs" style="width:100%; border-collapse:collapse; font-size:13px"></table>
+  <button id="muteBtn" class="mute-btn" aria-pressed="false" title="Toggle sound">🔊 Sound</button>
+  <button id="fsBtn" class="fs-btn" title="Fullscreen">⛶ Fullscreen</button>
+  <div class="overlay">
+    <div id="startCard" class="card">
+      <h1>Tap to Start</h1>
+      <p>Tap again to flap • Best is saved</p>
+    </div>
+    <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
+      <h1>Game Over</h1>
+      <p id="finalScoreP">Score: 0 • Best: 0</p>
+      <p style="opacity:.85;font-size:12px;margin-top:8px">Tap <b>outside</b> this window to restart (after 1s)</p>
+      <img id="sysImg" alt="System image" />
+      <div id="sysInfoBox" style="margin-top:12px; text-align:left; display:none">
+        <div style="font-weight:800; font-size:16px; margin-bottom:6px">System: <span id="sysTitle">—</span></div>
+        <div id="sysBlurb" style="opacity:.9; font-size:13px; margin-bottom:8px; white-space:pre-line">—</div>
+        <div id="sysSpecsBox" style="margin-top:10px; display:none">
+          <table id="sysSpecs" style="width:100%; border-collapse:collapse; font-size:13px"></table>
+        </div>
+        <div id="sysLinks" style="margin-top:8px; font-size:13px"></div>
       </div>
-      <div id="sysLinks" style="margin-top:8px; font-size:13px"></div>
     </div>
   </div>
-</div>
-<div id="rotBlock" class="rot-overlay">
-  <div class="rot-box">
-    <h2>Rotate your device</h2>
-    <p>This game is landscape-only. Turn your device to play.</p>
+  <div id="rotBlock" class="rot-overlay">
+    <div class="rot-box">
+      <h2>Rotate your device</h2>
+      <p>This game is landscape-only. Turn your device to play.</p>
+    </div>
   </div>
-</div>
-<div id="loadingOverlay">Loading…</div>
+  <div id="loadingOverlay">Loading…</div>
 
-<script>
-(() => {
-  const VERSION = '1.45b‑smooth60‑horizTest';
-  const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-  const W = 1920, H = 1080;
-  const SPEED_MULT = isMobile ? 1.40 : 1.50;
-  const G = 4800 * SPEED_MULT;
-  const LIFT_V0 = -1350 * SPEED_MULT;
-  const MAX_FALL = 2200 * SPEED_MULT;
-  const SCROLL_PPS = 480 * SPEED_MULT;
-  const PIPE_W = 180;
-  const GAP_MIN = 310, GAP_MAX = 450;
-  const PIPE_SPAWN_EVERY_S = 1.8;
-  const BIRD_INSET = 8, GAP_FORGIVE = 12;
+  <script>
+    (() => {
+      const VERSION = '1.45b‑smooth60‑horizTest';
+      const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+      const W = 1920, H = 1080;
+      const SPEED_MULT = isMobile ? 1.40 : 1.50;
+      const G = 4800 * SPEED_MULT;
+      const LIFT_V0 = -1350 * SPEED_MULT;
+      const MAX_FALL = 2200 * SPEED_MULT;
+      const SCROLL_PPS = 480 * SPEED_MULT;
+      const PIPE_W = 180;
+      const BIRD_INSET = 8;
 
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d', { alpha:false });
-  ctx.imageSmoothingEnabled = true;
-  function fit(){ const vw=innerWidth, vh=Math.round(visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
-  addEventListener('resize', fit, {passive:true}); visualViewport&&visualViewport.addEventListener('resize', fit, {passive:true}); fit();
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d', { alpha:false });
+      ctx.imageSmoothingEnabled = true;
+      function fit(){
+        const vw = innerWidth;
+        const vh = Math.round(visualViewport ? visualViewport.height : innerHeight);
+        const s = Math.min(vw/W, vh/H);
+        canvas.style.transform = `translate(-50%, -50%) scale(${s})`;
+      }
+      addEventListener('resize', fit, {passive:true});
+      visualViewport && visualViewport.addEventListener('resize', fit, {passive:true});
+      fit();
 
-  const rotBlock = document.getElementById('rotBlock');
-  function checkOrientation(){ rotBlock.classList.toggle('show', innerWidth<innerHeight); }
-  addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
+      const rotBlock = document.getElementById('rotBlock');
+      function checkOrientation(){
+        rotBlock.classList.toggle('show', innerWidth < innerHeight);
+      }
+      addEventListener('resize', checkOrientation, {passive:true});
+      checkOrientation();
 
-  // UI refs ...
-  const scoreEl = document.getElementById('scoreVal');
-  const lastEl = document.getElementById('lastVal');
-  const bestEl = document.getElementById('bestVal');
-  const startCard = document.getElementById('startCard');
-  const gameOverCard = document.getElementById('gameOverCard');
-  const finalScoreP = document.getElementById('finalScoreP');
-  const fsBtn = document.getElementById('fsBtn');
+      const scoreEl = document.getElementById('scoreVal');
+      const lastEl = document.getElementById('lastVal');
+      const bestEl = document.getElementById('bestVal');
+      const startCard = document.getElementById('startCard');
+      const gameOverCard = document.getElementById('gameOverCard');
+      const finalScoreP = document.getElementById('finalScoreP');
+      const fsBtn = document.getElementById('fsBtn');
 
-  function inFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
-  function updateFsBtn(){ const full=!!inFullscreen(); fsBtn.textContent = full ? "⤢ Exit" : "⛶ Fullscreen"; }
-  fsBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); const el=document.documentElement; try{ if(!inFullscreen()){ await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.()); } else { await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.()); } }catch(_){} updateFsBtn(); }, {passive:false});
-  ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
+      function inFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
+      function updateFsBtn(){
+        const full = !!inFullscreen();
+        fsBtn.textContent = full ? "⤢ Exit" : "⛶ Fullscreen";
+      }
+      fsBtn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const el = document.documentElement;
+        try{
+          if (!inFullscreen()) {
+            await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.());
+          } else {
+            await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.());
+          }
+        }catch(_){}
+        updateFsBtn();
+      }, {passive:false});
+      ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev => document.addEventListener(ev, updateFsBtn, {passive:true}));
 
-  let started=false, over=false, restartLocked=false;
-  let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
-  let spawnTimer = 0;
+      let started = false, over = false, restartLocked = false;
+      let score = 0, lastScore = 0, best = Number(localStorage.getItem('flappyMoBest') || 0);
+      bestEl.textContent = best;
 
-  // Horizontal pipe session flag
-  let horizontalPhase = true;
+      let spawnTimer = 0;
+      const hPipes = [];
+      const bird = {
+        x: Math.round(W * 0.167),
+        y: Math.round(H * 0.5),
+        w: Math.round(H * 0.069),
+        h: Math.round(H * 0.069),
+        v: 0,
+        yRender: 0,
+        draw(){
+          ctx.save();
+          const a = Math.max(-0.45, Math.min(0.9, (this.v/600)*0.5));
+          ctx.translate(this.x + this.w/2, this.yRender);
+          ctx.rotate(a);
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
+          ctx.restore();
+        },
+        step(dt){
+          this.v += G * dt;
+          if (this.v > MAX_FALL) this.v = MAX_FALL;
+          this.y += this.v * dt;
+        },
+        flap(){ this.v = LIFT_V0; },
+        reset(){
+          this.y = Math.round(H * 0.5);
+          this.v = 0;
+        }
+      };
 
-  // Audio and other reusable functions ...
-  let audioCtx=null, masterGain=null, audioReady=false, muted=false;
-  function setMuted(m){ muted=m; if(masterGain) masterGain.gain.value = muted?0:1; const b=document.getElementById('muteBtn'); b.textContent = muted?"🔇 Muted":"🔊 Sound"; b.setAttribute("aria-pressed", String(muted)); }
-  document.getElementById('muteBtn').addEventListener('click', (e)=>{ e.stopPropagation(); setMuted(!muted); });
-  async function initAudioOnce(){ if(audioReady) return; audioCtx = new (window.AudioContext||window.webkitAudioContext)({latencyHint:"interactive"}); masterGain=audioCtx.createGain(); masterGain.gain.value=muted?0:0.8; masterGain.connect(audioCtx.destination); try{ await audioCtx.resume(); }catch(_){} audioReady=true; }
-  function woosh(d=.25){ if(!audioReady||muted) return; const n=Math.max(1,audioCtx.sampleRate*d); const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate); const data=buf.getChannelData(0); for(let i=0;i<n;i++) data[i]=(Math.random()*2-1)*0.3; const src=audioCtx.createBufferSource(); src.buffer=buf; const lp=audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=1200; const g=audioCtx.createGain(); const t=audioCtx.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.4,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+d); src.connect(lp); lp.connect(g); g.connect(masterGain); src.start(); src.stop(t+d+0.05); }
-  const playFlap = ()=>woosh(.25);
+      function startGame(){
+        started = true;
+        over = false;
+        restartLocked = false;
+        lastScore = score;
+        lastEl.textContent = lastScore;
+        score = 0;
+        scoreEl.textContent = "0";
+        hPipes.length = 0;
+        bird.reset();
+        startCard.classList.add('hidden');
+        gameOverCard.classList.add('hidden');
+        createHorizontalTestPipes();
+      }
 
-  // Horizontal pipes container
-  const hPipes = [];
+      function endGame(){
+        if (over) return;
+        over = true;
+        bird.v = 0;
+        finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
+        gameOverCard.classList.remove('hidden');
+        restartLocked = true;
+        setTimeout(() => { restartLocked = false; }, 1000);
+      }
 
-  function createHorizontalTestPipes() {
-    // spawn 3 horizontals with space between
-    const gapV = 300; // vertical gap for bird to pass
-    const yPositions = [H*0.3, H*0.5, H*0.7];
-    const xStart = W + 200; // offscreen start
-    const spacing = 400; // distance between them
-    for(let i=0; i<3; i++){
-      hPipes.push({
-        x: xStart + i * spacing,
-        yCenter: yPositions[i],
-        width: H,  // rotated pipe length
-        height: PIPE_W,
-        gapV: gapV,
-        passed: false
-      });
-    }
-  }
-
-  function drawHorizontalPipes(dt){
-    ctx.save();
-    for(const p of hPipes){
-      p.x -= SCROLL_PPS * dt;
-      // draw rotated pipe
-      ctx.save();
-      // move to pipe's center
-      ctx.translate(p.x, p.yCenter);
-      ctx.rotate(-Math.PI / 2);
-      // draw bottom sprite body as placeholder rectangle
-      // you could use image but fallback = rectangle
-      ctx.fillStyle = "#228822";
-      ctx.fillRect(0, -p.height/2, p.width, p.height);
-      ctx.restore();
-
-      // collision
-      const bx = bird.x + bird.w/2;
-      const by = bird.yRender;
-      const ygap1 = p.yCenter - p.gapV/2;
-      const ygap2 = p.yCenter + p.gapV/2;
-      if (bx > p.x && bx < p.x + p.height) {
-        if (by < ygap1 || by > ygap2) {
-          endGame();
-          return;
+      function createHorizontalTestPipes(){
+        const gapV = 300;
+        const yPositions = [H*0.3, H*0.5, H*0.7];
+        const xStart = W + 200;
+        const spacing = 400;
+        for (let i = 0; i < 3; i++){
+          hPipes.push({
+            x: xStart + i * spacing,
+            yCenter: yPositions[i],
+            width: H,
+            height: PIPE_W,
+            gapV: gapV,
+            passed: false
+          });
         }
       }
 
-      // scoring
-      if(!p.passed && bx > p.x + p.height) {
-        p.passed = true;
-        score++;
-        scoreEl.textContent = score;
-        if(score > best){ best = score; bestEl.textContent = best; localStorage.setItem('flappyMoBest', String(best)); }
+      function drawHorizontalPipes(dt){
+        ctx.save();
+        for (const p of hPipes){
+          p.x -= SCROLL_PPS * dt;
+          ctx.save();
+          ctx.translate(p.x, p.yCenter);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillStyle = "#228822";
+          ctx.fillRect(0, -p.height/2, p.width, p.height);
+          ctx.restore();
+
+          const bx = bird.x + bird.w/2;
+          const by = bird.yRender;
+          const ygap1 = p.yCenter - p.gapV/2;
+          const ygap2 = p.yCenter + p.gapV/2;
+          if (bx > p.x && bx < p.x + p.height){
+            if (by < ygap1 || by > ygap2){
+              endGame();
+              return;
+            }
+          }
+          if (!p.passed && bx > p.x + p.height){
+            p.passed = true;
+            score++;
+            scoreEl.textContent = score;
+            if (score > best) {
+              best = score;
+              bestEl.textContent = best;
+              localStorage.setItem('flappyMoBest', String(best));
+            }
+          }
+        }
+        ctx.restore();
       }
-    }
-    ctx.restore();
-  }
 
-  // rest unchanged: Raw, Styles, rebuildStyles(), pipe logic, bird, step, collision, loop, endGame, startGame, handleTap...
-
-  // Insert into loop drawing:
-  function loop(ts){
-    // physics part unchanged...
-    let frameDt = (ts - lastTs) / 1000;
-    if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT;
-    if (frameDt < 0) frameDt = 0;
-    if (samples.length<30) calibrate(frameDt);
-    lastTs = ts;
-
-    accumulator += frameDt;
-    while (accumulator >= STEP) {
-      if(started && !over){
-        stepPipes(STEP);
-        bird.step(STEP);
-        if(bird.y + (bird.h - BIRD_INSET) >= H) endGame();
-        if(bird.y + BIRD_INSET <= 0) endGame();
+      function handleTap(e){
+        e.preventDefault();
+        e.stopPropagation();
+        if (!started){
+          startGame();
+          bird.flap();
+          return;
+        }
+        if (!over){
+          bird.flap();
+          return;
+        }
+        if (!restartLocked){
+          startGame();
+        }
       }
-      accumulator -= STEP;
-    }
-    let leftover = over ? 0 : accumulator;
 
-    ctx.clearRect(0,0,W,H);
-    drawBackground();
-    drawPipesInterpolated(leftover);
-    bird.yRender = bird.y + bird.v * leftover + (!over ? 0.5 * G * leftover * leftover : 0);
-    bird.draw();
+      startCard.addEventListener('click', handleTap, {passive:false});
+      startCard.addEventListener('touchstart', handleTap, {passive:false});
+      document.addEventListener('pointerdown', (e)=>{
+        if (e.target.closest('#gameOverCard')) return;
+        if (e.target.closest('#muteBtn, #fsBtn')) return;
+        handleTap(e);
+      }, {passive:false});
+      document.addEventListener('keydown', (e)=>{
+        if (e.code === 'Space' || e.key === ' ') handleTap(e);
+      }, {passive:false});
 
-    if(horizontalPhase && started && !over){
-      drawHorizontalPipes(leftover);
-    }
+      let lastTs = performance.now();
+      let accumulator = 0;
+      const physicsHz = 120;
+      const STEP = 1 / physicsHz;
+      const MAX_FRAME_DT = 0.12;
 
-    if(started && !over){ collideAndScore(leftover); }
+      function loop(ts){
+        let frameDt = (ts - lastTs) / 1000;
+        if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT;
+        if (frameDt < 0) frameDt = 0;
+        lastTs = ts;
 
-    ctx.fillStyle='rgba(0,0,0,.95)';
-    ctx.font='700 16px Montserrat,system-ui';
-    ctx.fillText('v'+VERSION, 14, H-14);
+        accumulator += frameDt;
+        while (accumulator >= STEP){
+          if (started && !over){
+            bird.step(STEP);
+          }
+          accumulator -= STEP;
+        }
+        const leftover = over ? 0 : accumulator;
 
-    requestAnimationFrame(loop);
-  }
+        ctx.clearRect(0,0,W,H);
 
-  // Boot sequence
-  (async () => {
-    // load assets then...
-    document.getElementById('loadingOverlay').style.display='none';
-    createHorizontalTestPipes(); // spawn horizontals at start
-    requestAnimationFrame(loop);
-  })();
+        // Background
+        ctx.fillStyle = "#d9f4ff";
+        ctx.fillRect(0,0,W,H);
 
-  // handleTap, startGame, endGame unchanged...
+        bird.yRender = bird.y + bird.v * leftover + (over ? 0 : 0.5 * G * leftover * leftover);
+        bird.draw();
 
-})(); // IIFE
-</script>
+        if (started && !over){
+          drawHorizontalPipes(leftover);
+        }
+
+        ctx.fillStyle = 'rgba(0,0,0,.95)';
+        ctx.font = '700 16px Montserrat,system-ui';
+        ctx.fillText('v' + VERSION, 14, H - 14);
+
+        requestAnimationFrame(loop);
+      }
+
+      (async () => {
+        document.getElementById('loadingOverlay').style.display = 'none';
+        requestAnimationFrame(loop);
+      })();
+    })();
+  </script>
 </body>
 </html>
