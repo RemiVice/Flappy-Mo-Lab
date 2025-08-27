@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46h3-exp)</title>
+<title>Flappy Mo — Local Assets (v1.46-cycle)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -63,6 +63,7 @@
 
 <canvas id="game" width="1920" height="1080"></canvas>
 
+<!-- HUD -->
 <div class="hud">
   <div class="badge">Score: <span id="scoreVal">0</span></div>
   <div class="badge">Last:  <span id="lastVal">0</span></div>
@@ -71,6 +72,7 @@
 <button id="muteBtn" class="mute-btn" aria-pressed="false" title="Toggle sound">🔊 Sound</button>
 <button id="fsBtn" class="fs-btn" title="Fullscreen">⛶ Fullscreen</button>
 
+<!-- Overlays -->
 <div class="overlay">
   <div id="startCard" class="card">
     <h1>Tap to Start</h1>
@@ -94,6 +96,7 @@
   </div>
 </div>
 
+<!-- Rotate blocker -->
 <div id="rotBlock" class="rot-overlay">
   <div class="rot-box">
     <h2>Rotate your device</h2>
@@ -105,10 +108,10 @@
 
 <script>
 (() => {
-  const VERSION = '1.46h3-exp';
+  const VERSION = '1.46-cycle';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-  // WORLD space
+  // WORLD
   const W = 1920, H = 1080;
 
   // Physics
@@ -118,20 +121,33 @@
   const MAX_FALL  = 2200 * SPEED_MULT;
   const SCROLL_PPS=  480 * SPEED_MULT;
 
+  // Pipes
   const PIPE_W    = 180;
   const GAP_MIN   = 310, GAP_MAX = 450;
   const PIPE_SPAWN_EVERY_S = 1.8;
 
   const BIRD_INSET = 8, GAP_FORGIVE = 12;
 
-  /* PHASE CONTROL (no mixing) */
-  let phase = 'H_TEST';
-  const HORIZ_AT_START_COUNT = 3;              // keep same spacing between the 3 bars
-  const HORIZ_SPACING_X      = Math.round(W * 0.25);
-  const HORIZ_MARGIN_Y       = Math.round(H * 0.18);
-  const SWITCH_BUFFER_PIXELS = Math.round(W * 0.06); // ⬅ shorter buffer before verticals
-  let lastHorizRightEdge = null;
-  let switchBufferTime = 0;
+  /* ---------- PHASE ENGINE ----------
+
+     VERTICALS  -> (after every 10 passed verticals) PRE_BUFFER
+     PRE_BUFFER -> H_CHALLENGE (spawn 3 horizontals)
+     H_CHALLENGE-> POST_BUFFER
+     POST_BUFFER-> VERTICALS (repeat)
+
+     No mixing of types at any time.
+  -----------------------------------*/
+  let phase = 'VERTICALS';
+  let spawnTimer = 0;
+
+  // Challenge config
+  const CHALLENGE_BARS = 3;
+  const HORIZ_SPACING_X = Math.round(W * 0.25); // spacing between the 3 bars
+  const HORIZ_MARGIN_Y  = Math.round(H * 0.18); // keep bars away from top/bottom
+  const BUFFER_PIXELS   = Math.round(W * 0.2);  // 0.2 before & after the 3
+  let bufferTime = 0;                           // counts down in seconds
+  let challengeQueued = false;                  // prevent double queueing
+  let verticalsPassed = 0;                      // how many verticals the player has passed (scored)
 
   // Canvas fit
   const canvas = document.getElementById('game');
@@ -156,13 +172,12 @@
 
   function inFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
   function updateFsBtn(){ const full=!!inFullscreen(); fsBtn.textContent = full ? "⤢ Exit" : "⛶ Fullscreen"; }
-  fsBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); const el=document.documentElement; try{ if(!inFullscreen()){ await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.()); } else { await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.()); } }catch(_){} updateFsBtn(); }, {passive:false});
+  fsBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); const el=document.documentElement; try{ if(!inFullscreen()){ await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.() ); } else { await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.()); } }catch(_){} updateFsBtn(); }, {passive:false});
   ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
 
   // Game state
   let started=false, over=false, restartLocked=false;
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
-  let spawnTimer = 0;
 
   // Audio
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
@@ -172,7 +187,7 @@
   function woosh(d=.25){ if(!audioReady||muted) return; const n=Math.max(1,audioCtx.sampleRate*d); const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate); const data=buf.getChannelData(0); for(let i=0;i<n;i++) data[i]=(Math.random()*2-1)*0.3; const src=audioCtx.createBufferSource(); src.buffer=buf; const lp=audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=1200; const g=audioCtx.createGain(); const t=audioCtx.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(0.4,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+d); src.connect(lp); lp.connect(g); g.connect(masterGain); src.start(); src.stop(t+d+0.05); }
   const playFlap = ()=>woosh(.25);
 
-  // Assets helpers
+  // Asset helpers
   function loadImageWithTimeout(src, timeoutMs=6000){
     return new Promise((resolve) => {
       if(!src){ resolve(null); return; }
@@ -232,7 +247,7 @@
     }
   }
 
-  /* Systems info (unchanged) */
+  /* Systems (same content as before) */
   const SYSTEMS = [
     { title:"EATNASTAK (DOUBLE FACE)", blurb:`When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
 offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding
@@ -270,13 +285,26 @@ For high-density storage of relatively small and light items in tight quarters, 
   function buildVerticalSprite(sty, top, gap, w){
     const c=document.createElement('canvas'); c.width=w; c.height=H;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    if(top>0){ const cap=sty.top.cap, body=sty.top.body; const capH=Math.min(cap.height,top), bodyH=top-capH;
-      if(bodyH>0){ let y=top-capH-body.height; while(y>=0){ g.drawImage(body,0,y,w,body.height); y-=body.height; } const rem=(top-capH)%body.height; if(rem>0) g.drawImage(body,0,body.height-rem,body.width,rem,0,0,w,rem); }
+    if(top>0){
+      const cap=sty.top.cap, body=sty.top.body;
+      const capH=Math.min(cap.height,top), bodyH=top-capH;
+      if(bodyH>0){
+        let y=top-capH-body.height;
+        while(y>=0){ g.drawImage(body,0,y,w,body.height); y-=body.height; }
+        const rem=(top-capH)%body.height;
+        if(rem>0) g.drawImage(body,0,body.height-rem,body.width,rem,0,0,w,rem);
+      }
       g.drawImage(cap,0,top-capH,w,capH);
     }
     const by=top+gap, bottomH=H-by;
-    if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH);
-      let y=by+capH, filled=0, remain=bottomH-capH; while(filled+body.height<=remain){ g.drawImage(body,0,y,w,body.height); y+=body.height; filled+=body.height; } const left=remain-filled; if(left>0) g.drawImage(body,0,0,body.width,left,0,y,w,left);
+    if(bottomH>0){
+      const cap=sty.bottom.cap, body=sty.bottom.body;
+      const capH=Math.min(cap.height,bottomH);
+      g.drawImage(cap,0,by,w,capH);
+      let y=by+capH, filled=0, remain=bottomH-capH;
+      while(filled+body.height<=remain){ g.drawImage(body,0,y,w,body.height); y+=body.height; filled+=body.height; }
+      const left=remain-filled;
+      if(left>0) g.drawImage(body,0,0,body.width,left,0,y,w,left);
     }
     return c;
   }
@@ -284,10 +312,10 @@ For high-density storage of relatively small and light items in tight quarters, 
   function buildHorizontalSprite(sty){
     const img=sty.botImg; if(!img) return null;
     const drawW=sty.drawW, scale=drawW/(img.naturalWidth||img.width);
-    const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+    const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale)); // final length
     const c=document.createElement('canvas'); c.width=scaledH; c.height=drawW;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    g.translate(0,drawW); g.rotate(-Math.PI/2);
+    g.translate(0,drawW); g.rotate(-Math.PI/2); // face left
     g.drawImage(img,0,0,img.naturalWidth||img.width,img.naturalHeight||img.height,0,0,drawW,scaledH);
     return c;
   }
@@ -313,37 +341,65 @@ For high-density storage of relatively small and light items in tight quarters, 
     obstacles.push({type:'H',x:xStart,y,w,h,styleIndex,scored:false,sprite});
   }
 
-  function queueInitialHorizontals(){
-    const firstX=W; let lastRight=0;
-    for(let i=0;i<HORIZ_AT_START_COUNT;i++){
+  function spawnHorizontalChallenge(){
+    const firstX=W;
+    let lastRight=0;
+    for(let i=0;i<CHALLENGE_BARS;i++){
       const x=(i===0?firstX:lastRight+HORIZ_SPACING_X);
       spawnHorizontalAt(x);
-      const last=obstacles[obstacles.length-1]; lastRight=last.x+last.w;
+      const last=obstacles[obstacles.length-1];
+      lastRight = last.x + last.w;
     }
-    lastHorizRightEdge=lastRight;
   }
 
   function stepObstacles(dt){
+    // Move
     for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
+    // Cleanup
     for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x+obstacles[i].w<=0) obstacles.splice(i,1);
 
-    if(phase==='H_TEST'){
-      if(obstacles.findIndex(o=>o.type==='H')===-1){
-        phase='SWITCH_BUFFER';
-        switchBufferTime = SWITCH_BUFFER_PIXELS / SCROLL_PPS; // shorter gap now
-      }
-      return;
-    }
-    if(phase==='SWITCH_BUFFER'){
-      switchBufferTime -= dt;
-      if(switchBufferTime<=0){ phase='VERTICALS'; spawnTimer=0; }
-      return;
-    }
+    // Phase logic
     if(phase==='VERTICALS'){
       spawnTimer += dt * SPEED_MULT;
       while(spawnTimer >= PIPE_SPAWN_EVERY_S){ spawnVertical(); spawnTimer -= PIPE_SPAWN_EVERY_S; }
+      // If a challenge was queued (at every 10 verticals), switch to PRE_BUFFER when screen is clear enough:
+      if(challengeQueued){
+        phase='PRE_BUFFER';
+        bufferTime = BUFFER_PIXELS / SCROLL_PPS;
+        challengeQueued=false;
+      }
+      return;
+    }
+
+    if(phase==='PRE_BUFFER'){
+      bufferTime -= dt;
+      if(bufferTime<=0){
+        phase='H_CHALLENGE';
+        spawnHorizontalChallenge();
+      }
+      return;
+    }
+
+    if(phase==='H_CHALLENGE'){
+      // wait until all horizontals are gone
+      if(obstacles.findIndex(o=>o.type==='H')===-1){
+        phase='POST_BUFFER';
+        bufferTime = BUFFER_PIXELS / SCROLL_PPS;
+      }
+      return;
+    }
+
+    if(phase==='POST_BUFFER'){
+      bufferTime -= dt;
+      if(bufferTime<=0){
+        phase='VERTICALS';
+        spawnTimer=0; // reset cadence
+      }
+      return;
     }
   }
+
+  function scoreUp(){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
 
   function collideAndScore(leftover){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
@@ -356,7 +412,14 @@ For high-density storage of relatively small and light items in tight quarters, 
           const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
           if(by1<safeTop || by2>safeBottom){ endGame(o.styleIndex); return true; }
         }
-        if(!o.scored && (xR+o.w)<bx1){ o.scored=true; scoreUp(); }
+        if(!o.scored && (xR+o.w)<bx1){
+          o.scored=true; scoreUp();
+          verticalsPassed++;                          // count verticals passed
+          if(verticalsPassed>0 && verticalsPassed%10===0){ // every multiple of 10
+            // Only queue if we're in pure verticals at the moment
+            if(phase==='VERTICALS') challengeQueued=true;
+          }
+        }
       } else {
         const overlapX=(bx2>xR)&&(bx1<xR+o.w), overlapY=(by2>o.y)&&(by1<o.y+o.h);
         if(overlapX && overlapY){ endGame(o.styleIndex); return true; }
@@ -368,12 +431,10 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   function drawObstaclesInterpolated(leftover){
     for(const o of obstacles){
-      const xR = o.x - SCROLL_PPS*leftover;
+      const xR=o.x - SCROLL_PPS*leftover;
       if(o.sprite) ctx.drawImage(o.sprite, xR, (o.type==='H'?o.y:0), o.w, (o.type==='H'?o.h:H));
     }
   }
-
-  function scoreUp(){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
 
   // Background & bird
   let bgImg=null, birdImg=null;
@@ -389,7 +450,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     reset(){ this.y=Math.round(H*0.5); this.v=0; }
   };
 
-  // Semi-fixed timestep with interpolation
+  // Semi-fixed timestep + interpolation
   let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
   const MAX_FRAME_DT=0.12, samples=[], targetRates=[60,90,100,120,144,165,180,240];
   function calibrate(dt){ if(samples.length<30){ samples.push(dt); return; } const avg=samples.reduce((a,b)=>a+b,0)/samples.length; const estHz=Math.round(1/avg); let nearest=targetRates[0], diff=1e9; for(const r of targetRates){ const d=Math.abs(estHz-r); if(d<diff){ diff=d; nearest=r; } } physicsHz=(nearest<=60)?120:Math.min(nearest,240); STEP=1/physicsHz; samples.length=30; }
@@ -406,7 +467,7 @@ For high-density storage of relatively small and light items in tight quarters, 
       }
       accumulator -= STEP;
     }
-    let leftover=over?0:accumulator;
+    let leftover = over?0:accumulator;
 
     ctx.clearRect(0,0,W,H);
     drawBackground();
@@ -416,14 +477,18 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     if(started && !over) collideAndScore(leftover);
 
-    ctx.fillStyle='rgba(0,0,0,.95)'; ctx.font='700 16px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14);
+    // version tag (black, bottom-left)
+    ctx.fillStyle='rgba(0,0,0,.95)';
+    ctx.font='700 16px Montserrat,system-ui';
+    ctx.fillText('v'+VERSION, 14, H-14);
+
     requestAnimationFrame(loop);
   }
 
+  // Game Over + system card
   function endGame(hitStyleIdx){
     if(over) return; over=true; bird.v=0;
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
-
     const box=document.getElementById('sysInfoBox'), imgEl=document.getElementById('sysImg'), tEl=document.getElementById('sysTitle'), bEl=document.getElementById('sysBlurb'), specsBox=document.getElementById('sysSpecsBox'), sEl=document.getElementById('sysSpecs'), lEl=document.getElementById('sysLinks');
 
     if(hitStyleIdx!=null && SYSTEMS[hitStyleIdx]){
@@ -458,10 +523,8 @@ For high-density storage of relatively small and light items in tight quarters, 
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
-
-    phase = (HORIZ_AT_START_COUNT>0) ? 'H_TEST' : 'VERTICALS';
-    if(phase==='H_TEST') queueInitialHorizontals();
-
+    phase='VERTICALS';
+    bufferTime=0; challengeQueued=false; verticalsPassed=0;
     startCard.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
 
