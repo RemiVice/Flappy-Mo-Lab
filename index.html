@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46i-stableGrey)</title>
+<title>Flappy Mo — Local Assets (v1.46k-safeStart)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -45,12 +45,6 @@
   .mute-btn, .fs-btn{ position:fixed; z-index:13; pointer-events:auto; background:var(--glass); color:#fff; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
   .mute-btn{ right:12px; top:12px; }
   .fs-btn{ right:12px; bottom:12px; }
-
-  #loadingOverlay{
-    position:fixed; inset:0; display:grid; place-items:center;
-    background:#0b0d10; color:#fff; z-index:2000;
-    font-weight:800; font-size:18px;
-  }
 
   #sysImg {
     max-width:100%; max-height:240px; object-fit:contain;
@@ -111,11 +105,9 @@
   </div>
 </div>
 
-<div id="loadingOverlay">Loading…</div>
-
 <script>
 (() => {
-  const VERSION = '1.46i-stableGrey';
+  const VERSION = '1.46k-safeStart';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -161,12 +153,21 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha:false });
   ctx.imageSmoothingEnabled = true;
-  function fit(){ const vw=innerWidth, vh=Math.round(window.visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
-  addEventListener('resize', fit, {passive:true}); window.visualViewport&&visualViewport.addEventListener('resize', fit, {passive:true}); fit();
+  function fit(){
+    const vw = window.innerWidth;
+    const vh = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const s = Math.min(vw/W, vh/H);
+    canvas.style.transform = `translate(-50%, -50%) scale(${s})`;
+  }
+  addEventListener('resize', fit, {passive:true});
+  window.visualViewport && window.visualViewport.addEventListener('resize', fit, {passive:true});
+  fit();
 
   // Orientation
   const rotBlock = document.getElementById('rotBlock');
-  function checkOrientation(){ rotBlock.classList.toggle('show', innerWidth<innerHeight); }
+  function checkOrientation(){
+    rotBlock.classList.toggle('show', innerWidth < innerHeight);
+  }
   addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
   // UI
@@ -180,19 +181,30 @@
 
   function inFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
   function updateFsBtn(){ const full=!!inFullscreen(); fsBtn.textContent = full ? "⤢ Exit" : "⛶ Fullscreen"; }
-  fsBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); const el=document.documentElement; try{ if(!inFullscreen()){ await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.() ); } else { await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.()); } }catch(_){} updateFsBtn(); }, {passive:false});
+  fsBtn.addEventListener('click', async (e)=>{
+    e.stopPropagation();
+    const el=document.documentElement;
+    try{
+      if(!inFullscreen()){
+        await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.());
+      }else{
+        await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.());
+      }
+    }catch(_){}
+    updateFsBtn();
+  }, {passive:false});
   ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
 
   // Scores
   let started=false, over=false, restartLocked=false;
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
 
-  // ---------- AUDIO ----------
+  // ---------- AUDIO (optional) ----------
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
   function createAudio(){
     if(audioReady) return;
     const Ctor = window.AudioContext || window.webkitAudioContext;
-    if(!Ctor) return;
+    if(!Ctor) return; // no audio, fine
     audioCtx = new Ctor({ latencyHint: "interactive" });
     masterGain = audioCtx.createGain();
     masterGain.gain.value = muted ? 0 : 0.85;
@@ -218,6 +230,7 @@
     e.stopPropagation(); await unlockAudio(); setMuted(!muted);
   });
   function envGain(duration=0.25, attack=0.008, volume=1){
+    if(!audioReady) return null;
     const g = audioCtx.createGain();
     const now = audioCtx.currentTime;
     g.gain.setValueAtTime(0, now);
@@ -233,7 +246,7 @@
     for (let i=0;i<n;i++) data[i] = (Math.random()*2 - 1) * 0.35;
     const src = audioCtx.createBufferSource(); src.buffer = buf;
     const lp = audioCtx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = cutoff;
-    const g  = envGain(dur, 0.01, vol);
+    const g  = envGain(dur, 0.01, vol); if(!g) return;
     src.connect(lp); lp.connect(g); g.connect(masterGain);
     src.start(); src.stop(audioCtx.currentTime + dur + 0.05);
   }
@@ -252,15 +265,14 @@
     }
     const src = audioCtx.createBufferSource(); src.buffer = buf;
     const lp = audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value = 700;
-    const g  = envGain(dur, 0.02, 0.45);
+    const g  = envGain(dur, 0.02, 0.45); if(!g) return;
     src.connect(lp); lp.connect(g); g.connect(masterGain);
     src.start(); src.stop(audioCtx.currentTime + dur + 0.05);
   }
   const playFlap = ()=> noiseWoosh(0.22, 1200, 0.35);
   const playHit  = ()=> hitWave(1.1);
-  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') unlockAudio(); }, {passive:true});
 
-  // Asset helpers
+  // Asset helpers (optional images)
   function loadImageWithTimeout(src, timeoutMs=6000){
     return new Promise((resolve) => {
       if(!src){ resolve(null); return; }
@@ -320,7 +332,7 @@
     }
   }
 
-  /* Systems (your full content) */
+  /* Systems (with your full content) */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -431,9 +443,12 @@ For high-density storage of relatively small and light items in tight quarters, 
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
+  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
+
   function buildVerticalSprite(sty, top, gap, w){
     const c=document.createElement('canvas'); c.width=w; c.height=H;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    // top
     if(top>0){
       const cap=sty.top.cap, body=sty.top.body;
       const capH=Math.min(cap.height,top), bodyH=top-capH;
@@ -445,6 +460,7 @@ For high-density storage of relatively small and light items in tight quarters, 
       }
       g.drawImage(cap,0,top-capH,w,capH);
     }
+    // bottom
     const by=top+gap, bottomH=H-by;
     if(bottomH>0){
       const cap=sty.bottom.cap, body=sty.bottom.body;
@@ -459,19 +475,25 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   function buildHorizontalSprite(sty){
-    const img=sty.botImg; if(!img) return null;
+    const img=sty.botImg; // may be null; fallback uses solid
     const drawW=sty.drawW;
-    const scale=drawW/(img.naturalWidth||img.width);
-    const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale)); // length
-    const c=document.createElement('canvas'); c.width=scaledH; c.height=drawW;
+    const c=document.createElement('canvas'); c.width=Math.max(1, drawW*6); c.height=drawW; // long bar even without image
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    g.translate(0,drawW); g.rotate(-Math.PI/2); // face left, full-length
-    g.drawImage(img,0,0,img.naturalWidth||img.width,img.naturalHeight||img.height,0,0,drawW,scaledH);
+    if(img){
+      const scale=drawW/(img.naturalWidth||img.width);
+      const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale)); // length
+      c.width=scaledH; c.height=drawW;
+      g.translate(0,drawW); g.rotate(-Math.PI/2); // face left
+      g.drawImage(img,0,0,img.naturalWidth||img.width,img.naturalHeight||img.height,0,0,drawW,scaledH);
+    }else{
+      // fallback: solid green bar
+      g.fillStyle="#2e8b57"; g.fillRect(0,0,c.width,c.height);
+    }
     return c;
   }
 
   function spawnVerticalAt(xPos){
-    if(!Styles.length) return;
+    if(!Styles.length) return; // still safe: we will draw none until styles rebuilt
     const margin=Math.round(H*0.10), maxSection=Math.round(H*0.45);
     const minGapRequired=H-2*maxSection-2*margin, minGap=Math.max(GAP_MIN,Math.min(GAP_MAX,Math.max(0,Math.floor(minGapRequired))));
     const gap=randInt(minGap,GAP_MAX);
@@ -487,7 +509,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   function spawnHorizontalAt(xStart){
     if(!Styles.length) return;
     const styleIndex=Math.floor(Math.random()*Styles.length), sty=Styles[styleIndex];
-    const sprite=buildHorizontalSprite(sty); if(!sprite) return;
+    const sprite=buildHorizontalSprite(sty);
     const w=sprite.width, h=sty.drawW, y=randInt(HORIZ_MARGIN_Y,H-HORIZ_MARGIN_Y-h);
     obstacles.push({type:'H',x:xStart,y,w,h,styleIndex,scored:false,sprite});
   }
@@ -591,15 +613,26 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   }
 
-  // Background & bird
+  // Background & bird (assets optional)
   let bgImg=null, birdImg=null;
-  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); } }
+  function drawBackground(){
+    if(bgImg) ctx.drawImage(bgImg,0,0,W,H);
+    else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); }
+  }
 
   const bird={
     x:Math.round(W*0.167), y:Math.round(H*0.5),
     w:Math.round(H*0.069), h:Math.round(H*0.069),
     v:0, yRender:0,
-    draw(){ ctx.save(); const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5)); ctx.translate(this.x+this.w/2,this.yRender); ctx.rotate(a); if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); } else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);} ctx.restore(); },
+    draw(){
+      ctx.save();
+      const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
+      ctx.translate(this.x+this.w/2,this.yRender);
+      ctx.rotate(a);
+      if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
+      else { ctx.fillStyle="#ffffff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
+      ctx.restore();
+    },
     step(dt){ this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
     flap(){ this.v=LIFT_V0; noiseWoosh(0.22, 1200, 0.35); },
     reset(){ this.y=Math.round(H*0.5); this.v=0; }
@@ -611,49 +644,51 @@ For high-density storage of relatively small and light items in tight quarters, 
   function calibrate(dt){ if(samples.length<30){ samples.push(dt); return; } const avg=samples.reduce((a,b)=>a+b,0)/samples.length; const estHz=Math.round(1/avg); let nearest=targetRates[0], diff=1e9; for(const r of targetRates){ const d=Math.abs(estHz-r); if(d<diff){ diff=d; nearest=r; } } physicsHz=(nearest<=60)?120:Math.min(nearest,240); STEP=1/physicsHz; samples.length=30; }
 
   function loop(ts){
-    let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; if(samples.length<30) calibrate(frameDt); lastTs=ts;
-    accumulator += frameDt;
-    while(accumulator>=STEP){
-      if(started && !over){
-        stepObstacles(STEP);
-        bird.step(STEP);
+    try{
+      let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; if(samples.length<30) calibrate(frameDt); lastTs=ts;
+      accumulator += frameDt;
+      while(accumulator>=STEP){
+        if(started && !over){
+          stepObstacles(STEP);
+          bird.step(STEP);
 
-        // === Edge collisions with grace ===
-        const INSET = 8;
-        bird.yRender = bird.y;
+          // Edge collisions with grace
+          const INSET = 8;
+          bird.yRender = bird.y;
 
-        const topAllowancePx = bird.h * TOP_OVERLAP_FRAC;
-        if(bird.yRender - (bird.h/2 - INSET) <= -topAllowancePx){
-          endGame(null);
+          const topAllowancePx = bird.h * TOP_OVERLAP_FRAC;
+          if(bird.yRender - (bird.h/2 - INSET) <= -topAllowancePx){ endGame(null); }
+
+          const bottomAllowancePx = bird.h * BOTTOM_OVERLAP_FRAC;
+          if(bird.yRender + (bird.h/2 - INSET) >= H + bottomAllowancePx){ endGame(null); }
         }
-        const bottomAllowancePx = bird.h * BOTTOM_OVERLAP_FRAC;
-        if(bird.yRender + (bird.h/2 - INSET) >= H + bottomAllowancePx){
-          endGame(null);
-        }
+        accumulator -= STEP;
       }
-      accumulator -= STEP;
+      const leftover = over?0:accumulator;
+
+      ctx.clearRect(0,0,W,H);
+      drawBackground();
+      bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
+      drawObstaclesInterpolated(leftover);
+      bird.draw();
+
+      if(started && !over) collideAndScore(leftover);
+
+      // version tag (bottom-left, small grey)
+      ctx.fillStyle='rgba(120,120,120,0.95)';
+      ctx.font='700 8px Montserrat,system-ui';
+      ctx.fillText('v'+VERSION, 14, H-14);
+    }catch(_){
+      // If anything goes wrong, at least paint a background so it's not black
+      ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle="#333"; ctx.font='700 20px Montserrat,system-ui'; ctx.fillText('Recovering…', 20, 40);
     }
-    const leftover = over?0:accumulator;
-
-    ctx.clearRect(0,0,W,H);
-    drawBackground();
-    bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
-    drawObstaclesInterpolated(leftover);
-    bird.draw();
-
-    if(started && !over) collideAndScore(leftover);
-
-    // version tag (bottom-left, small grey)
-    ctx.fillStyle='rgba(120,120,120,0.95)';
-    ctx.font='700 8px Montserrat,system-ui';
-    ctx.fillText('v'+VERSION, 14, H-14);
-
     requestAnimationFrame(loop);
   }
 
   // Game Over + system card
   function endGame(hitStyleIdx){
-    if(over) return; over=true; bird.v=0; playHit();
+    if(over) return; over=true; bird.v=0; hitWave(1.1);
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
     const box=document.getElementById('sysInfoBox'), imgEl=document.getElementById('sysImg'), tEl=document.getElementById('sysTitle'), bEl=document.getElementById('sysBlurb'), specsBox=document.getElementById('sysSpecsBox'), sEl=document.getElementById('sysSpecs'), lEl=document.getElementById('sysLinks');
 
@@ -704,7 +739,7 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   async function handleTap(e){
     e?.preventDefault?.(); e?.stopPropagation?.();
-    await unlockAudio();
+    await unlockAudio(); // optional
     if(!rotBlock.classList.contains('show')){
       if(!started){ startGame(); bird.flap(); return; }
       if(!over){ bird.flap(); return; }
@@ -724,12 +759,10 @@ For high-density storage of relatively small and light items in tight quarters, 
     if(e.code==='Space'||e.key===' '){ await handleTap(e); }
   }, {passive:false});
 
-  // Boot
-  (async () => {
-    // Failsafe: hide loading overlay no matter what
-    const hideLoading = ()=>{ const lo=document.getElementById('loadingOverlay'); if(lo) lo.style.display='none'; };
-    setTimeout(hideLoading, 4000); // safety timeout
+  // Boot: start drawing immediately; load assets in background (optional)
+  requestAnimationFrame(loop);
 
+  (async () => {
     try{
       const [bg,birdPic] = await Promise.all([
         loadImageWithTimeout("assets/bg.png"),
@@ -737,13 +770,14 @@ For high-density storage of relatively small and light items in tight quarters, 
       ]);
       bgImg = bg || null; birdImg = birdPic || null;
 
+      // Load pipe images (optional)
       const promises=[]; for (const s of PIPE_STYLES_CFG){ promises.push(loadImageWithTimeout(s.bottom.url)); promises.push(loadImageWithTimeout(s.top.url)); }
       const results=await Promise.allSettled(promises);
       const bottoms=[], tops=[]; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=results[i*2]?.value||null; tops[i]=results[i*2+1]?.value||null; }
       Raw.bottoms=bottoms; Raw.tops=tops; rebuildStyles();
-    } finally {
-      hideLoading();
-      requestAnimationFrame(loop);
+    }catch(_){
+      // If any asset fails, we just keep fallbacks. No blocking.
+      rebuildStyles(); // still create placeholders
     }
   })();
 })();
