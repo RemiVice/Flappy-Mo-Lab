@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.46k-safeStart)</title>
+<title>Flappy Mo — Local Assets (v1.47-spriteBird)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -107,7 +107,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.46k-safeStart';
+  const VERSION = '1.47-spriteBird';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -153,21 +153,12 @@
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha:false });
   ctx.imageSmoothingEnabled = true;
-  function fit(){
-    const vw = window.innerWidth;
-    const vh = Math.round(window.visualViewport ? window.visualViewport.height : window.innerHeight);
-    const s = Math.min(vw/W, vh/H);
-    canvas.style.transform = `translate(-50%, -50%) scale(${s})`;
-  }
-  addEventListener('resize', fit, {passive:true});
-  window.visualViewport && window.visualViewport.addEventListener('resize', fit, {passive:true});
-  fit();
+  function fit(){ const vw=innerWidth, vh=Math.round(window.visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
+  addEventListener('resize', fit, {passive:true}); window.visualViewport&&visualViewport.addEventListener('resize', fit, {passive:true}); fit();
 
   // Orientation
   const rotBlock = document.getElementById('rotBlock');
-  function checkOrientation(){
-    rotBlock.classList.toggle('show', innerWidth < innerHeight);
-  }
+  function checkOrientation(){ rotBlock.classList.toggle('show', innerWidth<innerHeight); }
   addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
   // UI
@@ -181,109 +172,62 @@
 
   function inFullscreen(){ return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
   function updateFsBtn(){ const full=!!inFullscreen(); fsBtn.textContent = full ? "⤢ Exit" : "⛶ Fullscreen"; }
-  fsBtn.addEventListener('click', async (e)=>{
-    e.stopPropagation();
-    const el=document.documentElement;
-    try{
-      if(!inFullscreen()){
-        await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.());
-      }else{
-        await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.());
-      }
-    }catch(_){}
-    updateFsBtn();
-  }, {passive:false});
+  fsBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); const el=document.documentElement; try{ if(!inFullscreen()){ await (el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.msRequestFullscreen?.() ); } else { await (document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.msExitFullscreen?.()); } }catch(_){ } updateFsBtn(); }, {passive:false});
   ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
 
   // Scores
   let started=false, over=false, restartLocked=false;
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
 
-  // ---------- AUDIO (optional) ----------
+  // ---------- AUDIO ----------
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
   function createAudio(){
     if(audioReady) return;
     const Ctor = window.AudioContext || window.webkitAudioContext;
-    if(!Ctor) return; // no audio, fine
+    if(!Ctor) return;
     audioCtx = new Ctor({ latencyHint: "interactive" });
     masterGain = audioCtx.createGain();
     masterGain.gain.value = muted ? 0 : 0.85;
     masterGain.connect(audioCtx.destination);
     audioReady = true;
   }
-  async function unlockAudio(){
-    try{
-      createAudio();
-      if(audioCtx && audioCtx.state !== 'running'){
-        await audioCtx.resume();
-      }
-    }catch(_){}
-  }
-  function setMuted(m){
-    muted = m;
-    if(masterGain) masterGain.gain.value = muted ? 0 : 0.85;
-    const b=document.getElementById('muteBtn');
-    b.textContent = muted ? "🔇 Muted" : "🔊 Sound";
-    b.setAttribute("aria-pressed", String(muted));
-  }
-  document.getElementById('muteBtn').addEventListener('click', async (e)=>{
-    e.stopPropagation(); await unlockAudio(); setMuted(!muted);
-  });
-  function envGain(duration=0.25, attack=0.008, volume=1){
-    if(!audioReady) return null;
-    const g = audioCtx.createGain();
-    const now = audioCtx.currentTime;
-    g.gain.setValueAtTime(0, now);
-    g.gain.linearRampToValueAtTime(volume, now + attack);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    return g;
-  }
-  function noiseWoosh(dur=0.22, cutoff=1200, vol=0.35){
-    if(!audioReady || muted) return;
-    const n = Math.max(1, audioCtx.sampleRate * dur);
-    const buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i=0;i<n;i++) data[i] = (Math.random()*2 - 1) * 0.35;
-    const src = audioCtx.createBufferSource(); src.buffer = buf;
-    const lp = audioCtx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = cutoff;
-    const g  = envGain(dur, 0.01, vol); if(!g) return;
-    src.connect(lp); lp.connect(g); g.connect(masterGain);
-    src.start(); src.stop(audioCtx.currentTime + dur + 0.05);
-  }
-  function hitWave(dur=1.1){
-    if(!audioReady || muted) return;
-    const n = Math.max(1, audioCtx.sampleRate * dur);
-    const buf = audioCtx.createBuffer(1, n, audioCtx.sampleRate);
-    const data = buf.getChannelData(0);
-    let b0=0,b1=0,b2=0;
-    for(let i=0;i<n;i++){
-      const white = Math.random()*2-1;
-      b0 = 0.997*b0 + white*0.03;
-      b1 = 0.985*b1 + white*0.05;
-      b2 = 0.95*b2  + white*0.07;
-      data[i] = (b0+b1+b2)*0.65;
-    }
-    const src = audioCtx.createBufferSource(); src.buffer = buf;
-    const lp = audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value = 700;
-    const g  = envGain(dur, 0.02, 0.45); if(!g) return;
-    src.connect(lp); lp.connect(g); g.connect(masterGain);
-    src.start(); src.stop(audioCtx.currentTime + dur + 0.05);
-  }
+  async function unlockAudio(){ try{ createAudio(); if(audioCtx && audioCtx.state!=='running'){ await audioCtx.resume(); } }catch(_){ } }
+  function setMuted(m){ muted=m; if(masterGain) masterGain.gain.value = muted ? 0 : 0.85; const b=document.getElementById('muteBtn'); b.textContent = muted ? "🔇 Muted" : "🔊 Sound"; b.setAttribute("aria-pressed", String(muted)); }
+  document.getElementById('muteBtn').addEventListener('click', async (e)=>{ e.stopPropagation(); await unlockAudio(); setMuted(!muted); });
+  function envGain(duration=0.25, attack=0.008, volume=1){ if(!audioReady) return null; const g=audioCtx.createGain(); const now=audioCtx.currentTime; g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(volume, now+attack); g.gain.exponentialRampToValueAtTime(0.0001, now+duration); return g; }
+  function noiseWoosh(d=0.22, cutoff=1200, vol=0.35){ if(!audioReady||muted) return; const n=Math.max(1,audioCtx.sampleRate*d); const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate); const data=buf.getChannelData(0); for(let i=0;i<n;i++) data[i]=(Math.random()*2-1)*0.35; const src=audioCtx.createBufferSource(); src.buffer=buf; const lp=audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=cutoff; const g=envGain(d,0.01,vol); if(!g)return; src.connect(lp); lp.connect(g); g.connect(masterGain); src.start(); src.stop(audioCtx.currentTime+d+0.05); }
+  function hitWave(d=1.1){ if(!audioReady||muted) return; const n=Math.max(1,audioCtx.sampleRate*d); const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate); const data=buf.getChannelData(0); let b0=0,b1=0,b2=0; for(let i=0;i<n;i++){ const w=Math.random()*2-1; b0=0.997*b0+w*0.03; b1=0.985*b1+w*0.05; b2=0.95*b2+w*0.07; data[i]=(b0+b1+b2)*0.65; } const src=audioCtx.createBufferSource(); src.buffer=buf; const lp=audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=700; const g=envGain(d,0.02,0.45); if(!g)return; src.connect(lp); lp.connect(g); g.connect(masterGain); src.start(); src.stop(audioCtx.currentTime+d+0.05); }
   const playFlap = ()=> noiseWoosh(0.22, 1200, 0.35);
   const playHit  = ()=> hitWave(1.1);
 
-  // Asset helpers (optional images)
+  // ---------- ASSETS ----------
   function loadImageWithTimeout(src, timeoutMs=6000){
-    return new Promise((resolve) => {
-      if(!src){ resolve(null); return; }
-      const img = new Image(); img.referrerPolicy='no-referrer';
-      let done=false; const finish=(v)=>{ if(done) return; done=true; resolve(v||null); };
-      const timer=setTimeout(()=>finish(null), timeoutMs);
-      img.onload=()=>{ clearTimeout(timer); finish(img); };
-      img.onerror=()=>{ clearTimeout(timer); finish(null); };
-      img.src=src;
-    });
+    return new Promise((resolve)=>{ if(!src){ resolve(null); return; } const img=new Image(); img.referrerPolicy='no-referrer'; let done=false; const finish=(v)=>{ if(done) return; done=true; resolve(v||null); }; const t=setTimeout(()=>finish(null), timeoutMs); img.onload=()=>{ clearTimeout(t); finish(img); }; img.onerror=()=>{ clearTimeout(t); finish(null); }; img.src=src; });
   }
+
+  // Bird art:
+  const BIRD_SPRITE_URL    = "assets/bird-sprite.png"; // 🔁 4 frames in a row (recommended)
+  const BIRD_SPRITE_FRAMES = 4;     // change if your sheet has different frame count
+  const BIRD_SPRITE_FPS    = 10;    // animation speed (frames/sec)
+  let birdSprite=null;              // sprite sheet if present
+  let birdFallbackImg=null;         // single-frame fallback (assets/bird.png)
+
+  // Background:
+  let bgImg=null;
+
+  // ---------- PIPE ART & STYLES ----------
+  const PIPE_STYLES_CFG = [
+    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
+  ];
+  const Raw={ bottoms:[], tops:[] };
+  const Styles=[];
   function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
   function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
     if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.imageSmoothingEnabled=true; g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
@@ -306,20 +250,6 @@
     }
     return { cap, body };
   }
-
-  // Styles
-  const PIPE_STYLES_CFG = [
-    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
-  ];
-  const Raw={ bottoms:[], tops:[] };
-  const Styles=[];
   function rebuildStyles(){
     Styles.length=0;
     for(let i=0;i<PIPE_STYLES_CFG.length;i++){
@@ -332,7 +262,7 @@
     }
   }
 
-  /* Systems (with your full content) */
+  // ---------- SYSTEM INFO (Game Over) ----------
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -439,16 +369,13 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   ];
 
-  /* Obstacles */
+  /* ----------------- OBSTACLES ----------------- */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
-
-  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
 
   function buildVerticalSprite(sty, top, gap, w){
     const c=document.createElement('canvas'); c.width=w; c.height=H;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    // top
     if(top>0){
       const cap=sty.top.cap, body=sty.top.body;
       const capH=Math.min(cap.height,top), bodyH=top-capH;
@@ -460,7 +387,6 @@ For high-density storage of relatively small and light items in tight quarters, 
       }
       g.drawImage(cap,0,top-capH,w,capH);
     }
-    // bottom
     const by=top+gap, bottomH=H-by;
     if(bottomH>0){
       const cap=sty.bottom.cap, body=sty.bottom.body;
@@ -475,25 +401,24 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   function buildHorizontalSprite(sty){
-    const img=sty.botImg; // may be null; fallback uses solid
+    const img=sty.botImg;
     const drawW=sty.drawW;
-    const c=document.createElement('canvas'); c.width=Math.max(1, drawW*6); c.height=drawW; // long bar even without image
+    const c=document.createElement('canvas'); c.width=Math.max(1, drawW*6); c.height=drawW;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
     if(img){
       const scale=drawW/(img.naturalWidth||img.width);
-      const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale)); // length
+      const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
       c.width=scaledH; c.height=drawW;
-      g.translate(0,drawW); g.rotate(-Math.PI/2); // face left
+      g.translate(0,drawW); g.rotate(-Math.PI/2);
       g.drawImage(img,0,0,img.naturalWidth||img.width,img.naturalHeight||img.height,0,0,drawW,scaledH);
     }else{
-      // fallback: solid green bar
       g.fillStyle="#2e8b57"; g.fillRect(0,0,c.width,c.height);
     }
     return c;
   }
 
   function spawnVerticalAt(xPos){
-    if(!Styles.length) return; // still safe: we will draw none until styles rebuilt
+    if(!Styles.length) return;
     const margin=Math.round(H*0.10), maxSection=Math.round(H*0.45);
     const minGapRequired=H-2*maxSection-2*margin, minGap=Math.max(GAP_MIN,Math.min(GAP_MAX,Math.max(0,Math.floor(minGapRequired))));
     const gap=randInt(minGap,GAP_MAX);
@@ -504,7 +429,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     const sprite=buildVerticalSprite(sty,top,gap,w);
     obstacles.push({type:'V',x:xPos,top,gap,w,styleIndex,scored:false,sprite});
   }
-  function spawnVertical(){ spawnVerticalAt(W); }
+  const spawnVertical=()=>spawnVerticalAt(W);
 
   function spawnHorizontalAt(xStart){
     if(!Styles.length) return;
@@ -613,80 +538,99 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   }
 
-  // Background & bird (assets optional)
-  let bgImg=null, birdImg=null;
-  function drawBackground(){
-    if(bgImg) ctx.drawImage(bgImg,0,0,W,H);
-    else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); }
-  }
+  // ---------- BACKGROUND ----------
+  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); } }
 
+  // ---------- BIRD (sprite-sheet with fallback) ----------
   const bird={
     x:Math.round(W*0.167), y:Math.round(H*0.5),
     w:Math.round(H*0.069), h:Math.round(H*0.069),
     v:0, yRender:0,
-    draw(){
+    animTime:0,               // seconds accumulator for animation
+    draw(leftover, frameDt){
+      // tilt
+      const angle = Math.max(-0.45, Math.min(0.9, (this.v/600)*0.5));
+      // advance animation time
+      this.animTime += frameDt;
+
       ctx.save();
-      const a=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
-      ctx.translate(this.x+this.w/2,this.yRender);
-      ctx.rotate(a);
-      if(birdImg){ ctx.drawImage(birdImg,-this.w/2,-this.h/2,this.w,this.h); }
-      else { ctx.fillStyle="#ffffff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
+      ctx.translate(this.x+this.w/2, this.yRender);
+      ctx.rotate(angle);
+
+      // 1) Prefer sprite sheet
+      if (birdSprite && birdSprite.complete && birdSprite.naturalWidth) {
+        const frames = BIRD_SPRITE_FRAMES;
+        const fps    = BIRD_SPRITE_FPS;
+        const frameW = Math.floor(birdSprite.naturalWidth / frames);
+        const frameH = birdSprite.naturalHeight;
+        const idx    = Math.floor(this.animTime * fps) % frames;
+        const sx     = idx * frameW;
+        ctx.drawImage(
+          birdSprite,
+          sx, 0, frameW, frameH,
+          -this.w/2, -this.h/2, this.w, this.h
+        );
+      }
+      // 2) Fallback to single-frame image
+      else if (birdFallbackImg && birdFallbackImg.complete && birdFallbackImg.naturalWidth) {
+        ctx.drawImage(birdFallbackImg, -this.w/2, -this.h/2, this.w, this.h);
+      }
+      // 3) Final fallback: white box
+      else {
+        ctx.fillStyle="#ffffff";
+        ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
+      }
       ctx.restore();
     },
     step(dt){ this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
     flap(){ this.v=LIFT_V0; noiseWoosh(0.22, 1200, 0.35); },
-    reset(){ this.y=Math.round(H*0.5); this.v=0; }
+    reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; }
   };
 
-  // Semi-fixed timestep + interpolation
+  // ---------- SEMI-FIXED TIMESTEP + INTERP ----------
   let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
   const MAX_FRAME_DT=0.12, samples=[], targetRates=[60,90,100,120,144,165,180,240];
   function calibrate(dt){ if(samples.length<30){ samples.push(dt); return; } const avg=samples.reduce((a,b)=>a+b,0)/samples.length; const estHz=Math.round(1/avg); let nearest=targetRates[0], diff=1e9; for(const r of targetRates){ const d=Math.abs(estHz-r); if(d<diff){ diff=d; nearest=r; } } physicsHz=(nearest<=60)?120:Math.min(nearest,240); STEP=1/physicsHz; samples.length=30; }
 
   function loop(ts){
-    try{
-      let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; if(samples.length<30) calibrate(frameDt); lastTs=ts;
-      accumulator += frameDt;
-      while(accumulator>=STEP){
-        if(started && !over){
-          stepObstacles(STEP);
-          bird.step(STEP);
+    let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; if(samples.length<30) calibrate(frameDt); lastTs=ts;
+    accumulator += frameDt;
+    while(accumulator>=STEP){
+      if(started && !over){
+        stepObstacles(STEP);
+        bird.step(STEP);
 
-          // Edge collisions with grace
-          const INSET = 8;
-          bird.yRender = bird.y;
+        // Edge collisions with grace
+        const INSET = 8;
+        bird.yRender = bird.y;
 
-          const topAllowancePx = bird.h * TOP_OVERLAP_FRAC;
-          if(bird.yRender - (bird.h/2 - INSET) <= -topAllowancePx){ endGame(null); }
+        const topAllowancePx = bird.h * TOP_OVERLAP_FRAC;
+        if(bird.yRender - (bird.h/2 - INSET) <= -topAllowancePx) endGame(null);
 
-          const bottomAllowancePx = bird.h * BOTTOM_OVERLAP_FRAC;
-          if(bird.yRender + (bird.h/2 - INSET) >= H + bottomAllowancePx){ endGame(null); }
-        }
-        accumulator -= STEP;
+        const bottomAllowancePx = bird.h * BOTTOM_OVERLAP_FRAC;
+        if(bird.yRender + (bird.h/2 - INSET) >= H + bottomAllowancePx) endGame(null);
       }
-      const leftover = over?0:accumulator;
-
-      ctx.clearRect(0,0,W,H);
-      drawBackground();
-      bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
-      drawObstaclesInterpolated(leftover);
-      bird.draw();
-
-      if(started && !over) collideAndScore(leftover);
-
-      // version tag (bottom-left, small grey)
-      ctx.fillStyle='rgba(120,120,120,0.95)';
-      ctx.font='700 8px Montserrat,system-ui';
-      ctx.fillText('v'+VERSION, 14, H-14);
-    }catch(_){
-      // If anything goes wrong, at least paint a background so it's not black
-      ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H);
-      ctx.fillStyle="#333"; ctx.font='700 20px Montserrat,system-ui'; ctx.fillText('Recovering…', 20, 40);
+      accumulator -= STEP;
     }
+    const leftover = over?0:accumulator;
+
+    ctx.clearRect(0,0,W,H);
+    drawBackground();
+    bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
+    drawObstaclesInterpolated(leftover);
+    bird.draw(leftover, frameDt);
+
+    if(started && !over) collideAndScore(leftover);
+
+    // version tag (bottom-left, small grey)
+    ctx.fillStyle='rgba(120,120,120,0.95)';
+    ctx.font='700 8px Montserrat,system-ui';
+    ctx.fillText('v'+VERSION, 14, H-14);
+
     requestAnimationFrame(loop);
   }
 
-  // Game Over + system card
+  // ---------- GAME OVER + SYSTEM CARD ----------
   function endGame(hitStyleIdx){
     if(over) return; over=true; bird.v=0; hitWave(1.1);
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
@@ -739,7 +683,7 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   async function handleTap(e){
     e?.preventDefault?.(); e?.stopPropagation?.();
-    await unlockAudio(); // optional
+    await unlockAudio();
     if(!rotBlock.classList.contains('show')){
       if(!started){ startGame(); bird.flap(); return; }
       if(!over){ bird.flap(); return; }
@@ -759,25 +703,29 @@ For high-density storage of relatively small and light items in tight quarters, 
     if(e.code==='Space'||e.key===' '){ await handleTap(e); }
   }, {passive:false});
 
-  // Boot: start drawing immediately; load assets in background (optional)
-  requestAnimationFrame(loop);
+  // ---------- BOOT ----------
+  requestAnimationFrame(loop); // draw immediately with fallbacks
 
   (async () => {
     try{
-      const [bg,birdPic] = await Promise.all([
+      // Try sprite sheet first, then single bird.png, and background
+      const [sprite, single, bg] = await Promise.all([
+        loadImageWithTimeout(BIRD_SPRITE_URL),
+        loadImageWithTimeout("assets/bird.png"),
         loadImageWithTimeout("assets/bg.png"),
-        loadImageWithTimeout("assets/bird.png")
       ]);
-      bgImg = bg || null; birdImg = birdPic || null;
+      birdSprite = sprite || null;
+      birdFallbackImg = (!birdSprite && single) ? single : null;
+      bgImg = bg || null;
 
-      // Load pipe images (optional)
+      // Load pipes
       const promises=[]; for (const s of PIPE_STYLES_CFG){ promises.push(loadImageWithTimeout(s.bottom.url)); promises.push(loadImageWithTimeout(s.top.url)); }
       const results=await Promise.allSettled(promises);
-      const bottoms=[], tops=[]; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=results[i*2]?.value||null; tops[i]=results[i*2+1]?.value||null; }
+      const bottoms=[], tops=[];
+      for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=results[i*2]?.value||null; tops[i]=results[i*2+1]?.value||null; }
       Raw.bottoms=bottoms; Raw.tops=tops; rebuildStyles();
     }catch(_){
-      // If any asset fails, we just keep fallbacks. No blocking.
-      rebuildStyles(); // still create placeholders
+      rebuildStyles(); // placeholders if any fail
     }
   })();
 })();
