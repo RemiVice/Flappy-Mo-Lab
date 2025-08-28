@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.48b-rocket-plume)</title>
+<title>Flappy Mo — Local Assets (v1.48c-rocket-flame)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,7 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* Logical canvas 1920×1080; CSS scales (keeps motion smooth) */
+  /* Logical canvas 1920×1080; CSS scales to fit (keeps motion smooth) */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -106,7 +106,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.48b-rocket-plume';
+  const VERSION = '1.48c-rocket-flame';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -131,25 +131,28 @@
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);  // 6% (remember)
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // (remember: you set 6%)
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
 
   // Top & bottom grace
   const TOP_OVERLAP_FRAC    = 0.30;
   const BOTTOM_OVERLAP_FRAC = 0.75;
 
-  // ------- ROCKET EXHAUST (high-contrast, short, intense) -------
-  const JET_ENABLED      = true;
-  const JET_MAX_PARTICLES= 220;
-  const JET_SPAWN_RATE   = 200;    // ↑ dense
-  const JET_FLAP_BURST   = 0.18;   // short boost after flap
-  const JET_OFFSET_SCALE = 0.52;   // distance behind bird (× bird.w)
-  const JET_SPREAD       = 0.10;   // narrow cone
-  const JET_LEN_BASE     = 160;    // short plume
-  const JET_LEN_V_MULT   = 0.18;   // slight length change with |v|
-  const JET_SIZE         = 9;      // base radius
-  const JET_FADE         = 0.35;   // short life
-  const JET_GLOW_ALPHA   = 0.55;   // bright additive glow
+  // ------- ROCKET FLAME (short, parallel, intense) -------
+  // The flame is drawn as two layered quads (core + glow), aligned with bird angle.
+  // Length ~ bird width; intensity bumps on flap and when rising.
+  const FLAME = {
+    lenFrac: 1.00,      // length ~= bird.w * lenFrac
+    baseHalfFrac: 0.08, // half-width near nozzle (× bird.h)
+    tailHalfFrac: 0.22, // half-width at tail  (× bird.h)
+    offsetFrac: 0.52,   // how far behind bird center to start (× bird.w)
+    coreAlpha: 0.95,    // core opacity
+    glowAlpha: 0.65,    // overall glow intensity
+    flapBoostDur: 0.20, // seconds
+    flickerAmp: 0.06,   // ±6% subtle flicker
+  };
+  let flapBoostTimer = 0;
+  let tNow = 0; // for flicker
 
   // Flow / phases
   let phase = 'VERTICALS';
@@ -208,7 +211,7 @@
   let started=false, over=false, restartLocked=false;
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
 
-  // AUDIO (flap + hit only)
+  // AUDIO (flap + hit only — no score sound)
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
   function createAudio(){ if(audioReady) return; const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; audioCtx=new AC({latencyHint:"interactive"}); masterGain=audioCtx.createGain(); masterGain.gain.value=muted?0:0.85; masterGain.connect(audioCtx.destination); audioReady=true; }
   async function unlockAudio(){ try{ createAudio(); if(audioCtx && audioCtx.state!=='running'){ await audioCtx.resume(); } }catch(_){ } }
@@ -518,96 +521,102 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   }
 
-  // Background
-  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#ffe77a"; ctx.fillRect(0,0,W,H); } } // default yellowish
+  // Background (yellow default to test contrast)
+  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#ffe77a"; ctx.fillRect(0,0,W,H); } }
 
-  // --------- JET PARTICLES ----------
-  const jetPool = new Array(JET_MAX_PARTICLES).fill(null).map(()=>({alive:false,x:0,y:0,vx:0,vy:0,ttl:0,life:0,sz:0}));
-  let flapBoostTimer = 0;
+  // --------- ROCKET FLAME DRAWING ----------
+  function drawFlame(){
+    if(!started || over) return;
 
-  function spawnJet(dt, angle){
-    if(!JET_ENABLED) return;
-    // Throttle stronger when rising (engine firing)
-    const riseFactor = Math.max(0, Math.min(1, (-bird.v)/900)); // 0..1 when v is negative (going up)
-    const boost = Math.max(0, flapBoostTimer / JET_FLAP_BURST); // 0..1 after flap
-    const density = 1 + 1.2*riseFactor + 0.8*boost;
-    const spawnCount = Math.min(16, Math.round(JET_SPAWN_RATE * density * dt));
+    // Direction vectors from bird angle
+    const ang = bird.computeAngle();
+    const fwdX = Math.cos(ang), fwdY = Math.sin(ang);        // forward (nose)
+    const rightX = -Math.sin(ang), rightY = Math.cos(ang);   // +90°
 
-    const speed = (JET_LEN_BASE + JET_LEN_V_MULT * Math.abs(bird.v));
-    const dir = angle + Math.PI;
-    const nx = Math.cos(dir), ny = Math.sin(dir);
+    // Flame parameters (dynamic)
+    const centerX = bird.x + bird.w/2;
+    const centerY = bird.yRender;
 
-    const ox = bird.x + bird.w/2 - nx * (bird.w * JET_OFFSET_SCALE);
-    const oy = bird.yRender;
+    const riseFactor = Math.max(0, Math.min(1, (-bird.v)/900)); // 0..1 when rising
+    const boost = Math.max(0, Math.min(1, flapBoostTimer / FLAME.flapBoostDur));
+    tNow += 0.016; // approx
 
-    let spawned=0;
-    for(let i=0;i<jetPool.length && spawned<spawnCount;i++){
-      const p = jetPool[i];
-      if(p.alive) continue;
-      p.alive = true;
+    const flick = 1 + FLAME.flickerAmp * Math.sin(tNow * 60 + (boost*6));
+    const intensity = 0.95 + 0.7*boost + 0.45*riseFactor; // 1.. ~2
+    const len = bird.w * FLAME.lenFrac * intensity * flick;
 
-      // tight cone
-      const jitter = (Math.random()*2-1) * JET_SPREAD * bird.h;
-      const jx = -ny * jitter, jy = nx * jitter;
+    // Nozzle (start) slightly behind bird center, along -forward
+    const nozzleX = centerX - fwdX * (bird.w * FLAME.offsetFrac);
+    const nozzleY = centerY - fwdY * (bird.w * FLAME.offsetFrac);
 
-      p.x = ox + jx; p.y = oy + jy;
+    // Tail point
+    const tailX = nozzleX - fwdX * len;
+    const tailY = nozzleY - fwdY * len;
 
-      const vscale = speed * (0.85 + Math.random()*0.3);
-      p.vx = nx * vscale + (Math.random()*2-1)*40;
-      p.vy = ny * vscale + (Math.random()*2-1)*40;
+    // Widths
+    const baseHalf = bird.h * FLAME.baseHalfFrac;
+    const tailHalf = bird.h * FLAME.tailHalfFrac * intensity;
 
-      p.ttl = JET_FADE * (0.9 + Math.random()*0.3);
-      p.life= 0;
-      p.sz  = JET_SIZE * (0.7 + Math.random()*0.6);
-      spawned++;
-    }
-  }
+    // Core polygon (narrow)
+    const coreBaseLx = nozzleX + rightX * (baseHalf*0.7);
+    const coreBaseLy = nozzleY + rightY * (baseHalf*0.7);
+    const coreBaseRx = nozzleX - rightX * (baseHalf*0.7);
+    const coreBaseRy = nozzleY - rightY * (baseHalf*0.7);
+    const coreTailLx = tailX   + rightX * (tailHalf*0.60);
+    const coreTailLy = tailY   + rightY * (tailHalf*0.60);
+    const coreTailRx = tailX   - rightX * (tailHalf*0.60);
+    const coreTailRy = tailY   - rightY * (tailHalf*0.60);
 
-  function stepJet(dt){
-    if(!JET_ENABLED) return;
-    if(flapBoostTimer>0) flapBoostTimer = Math.max(0, flapBoostTimer - dt);
-    for(const p of jetPool){
-      if(!p.alive) continue;
-      p.life += dt;
-      if(p.life >= p.ttl){ p.alive = false; continue; }
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.sz *= 0.985;
-    }
-  }
+    // Glow polygon (wider)
+    const glowBaseLx = nozzleX + rightX * (baseHalf*1.2);
+    const glowBaseLy = nozzleY + rightY * (baseHalf*1.2);
+    const glowBaseRx = nozzleX - rightX * (baseHalf*1.2);
+    const glowBaseRy = nozzleY - rightY * (baseHalf*1.2);
+    const glowTailLx = tailX   + rightX * (tailHalf*1.20);
+    const glowTailLy = tailY   + rightY * (tailHalf*1.20);
+    const glowTailRx = tailX   - rightX * (tailHalf*1.20);
+    const glowTailRy = tailY   - rightY * (tailHalf*1.20);
 
-  function drawJet(){
-    if(!JET_ENABLED) return;
+    // Core gradient (no additive) — bright white→yellow→orange
+    const gradCore = ctx.createLinearGradient(nozzleX, nozzleY, tailX, tailY);
+    gradCore.addColorStop(0.00, `rgba(255,255,255,${FLAME.coreAlpha})`);
+    gradCore.addColorStop(0.35, `rgba(255,245,160,${FLAME.coreAlpha*0.95})`);
+    gradCore.addColorStop(1.00, `rgba(255,170,60,${FLAME.coreAlpha*0.80})`);
+
+    ctx.fillStyle = gradCore;
+    ctx.beginPath();
+    ctx.moveTo(coreBaseLx, coreBaseLy);
+    ctx.lineTo(coreBaseRx, coreBaseRy);
+    ctx.lineTo(coreTailRx, coreTailRy);
+    ctx.lineTo(coreTailLx, coreTailLy);
+    ctx.closePath();
+    ctx.fill();
+
+    // Glow gradient (additive) — yellow→orange→red, strong contrast on yellow bg
     const prevComp = ctx.globalCompositeOperation;
-    const prevAlpha= ctx.globalAlpha;
     ctx.globalCompositeOperation = 'lighter';
 
-    for(const p of jetPool){
-      if(!p.alive) continue;
-      const t = p.life / p.ttl; // 0..1
+    const gradGlow = ctx.createLinearGradient(nozzleX, nozzleY, tailX, tailY);
+    const ga = FLAME.glowAlpha;
+    gradGlow.addColorStop(0.00, `rgba(255,230,120,${ga*0.9})`);
+    gradGlow.addColorStop(0.45, `rgba(255,150,60,${ga*0.75})`);
+    gradGlow.addColorStop(1.00, `rgba(255,40,40,${ga*0.45})`);
 
-      // Core (very bright white→yellow)
-      ctx.globalAlpha = (1 - t) * (0.95 * JET_GLOW_ALPHA);
-      ctx.fillStyle = 'rgba(255, 245, 210, 1)'; // warm white
-      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*0.42), 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = gradGlow;
+    ctx.beginPath();
+    ctx.moveTo(glowBaseLx, glowBaseLy);
+    ctx.lineTo(glowBaseRx, glowBaseRy);
+    ctx.lineTo(glowTailRx, glowTailRy);
+    ctx.lineTo(glowTailLx, glowTailLy);
+    ctx.closePath();
+    ctx.fill();
 
-      // Mid glow (yellow)
-      ctx.globalAlpha = (1 - t) * (0.65 * JET_GLOW_ALPHA);
-      ctx.fillStyle = 'rgba(255, 220, 120, 1)';
-      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*0.75), 0, Math.PI*2); ctx.fill();
-
-      // Outer glow (orange/red) — high contrast on yellow bg
-      ctx.globalAlpha = (1 - t) * (0.50 * JET_GLOW_ALPHA);
-      ctx.fillStyle = 'rgba(255, 110, 40, 1)';
-      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*1.15), 0, Math.PI*2); ctx.fill();
-
-      ctx.globalAlpha = (1 - t) * (0.35 * JET_GLOW_ALPHA);
-      ctx.fillStyle = 'rgba(255, 40, 40, 1)';
-      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*1.6), 0, Math.PI*2); ctx.fill();
-    }
-
-    ctx.globalAlpha = prevAlpha;
     ctx.globalCompositeOperation = prevComp;
+
+    // decay boost timer
+    if (flapBoostTimer > 0) {
+      flapBoostTimer = Math.max(0, flapBoostTimer - 1/120);
+    }
   }
 
   // Bird (sprite sheet with fallback)
@@ -636,11 +645,11 @@ For high-density storage of relatively small and light items in tight quarters, 
       ctx.restore();
     },
     step(dt){ this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
-    flap(){ this.v=LIFT_V0; woosh(); if(JET_ENABLED) flapBoostTimer = JET_FLAP_BURST; },
+    flap(){ this.v=LIFT_V0; woosh(); flapBoostTimer = FLAME.flapBoostDur; },
     reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; this.angle=0; }
   };
 
-  // Semi-fixed timestep + interpolation
+  // Semi-fixed timestep + interpolation (smooth at 60Hz+)
   let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
   const MAX_FRAME_DT=0.12;
 
@@ -651,7 +660,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     while(accumulator>=STEP){
       if(started && !over){
         stepObstacles(STEP);
-        stepJet(STEP);
         bird.step(STEP);
 
         // Top/bottom grace
@@ -670,14 +678,12 @@ For high-density storage of relatively small and light items in tight quarters, 
     drawBackground();
     bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
 
-    // Exhaust
-    if(started && !over && JET_ENABLED){
-      const ang = bird.computeAngle();
-      spawnJet(frameDt, ang);
-    }
-
     drawObstaclesInterpolated(leftover);
-    drawJet();        // behind bird
+
+    // Draw flame BEFORE the bird so it appears behind
+    drawFlame();
+
+    // Draw bird
     bird.draw(frameDt);
 
     if(started && !over) collideAndScore(leftover);
@@ -727,13 +733,12 @@ For high-density storage of relatively small and light items in tight quarters, 
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
-    for(const p of jetPool){ p.alive=false; }
-    flapBoostTimer = 0;
 
     phase='VERTICALS'; bufferTime=0; challengeQueued=false; verticalsPassed=0;
     nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS; verticalsEnabled = true;
 
     startCard.classList.add('hidden'); gameOverCard.classList.add('hidden');
+    flapBoostTimer = 0;
   }
 
   async function handleTap(e){
