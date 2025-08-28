@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.49a-pixelflame)</title>
+<title>Flappy Mo — Local Assets (v1.49b-pixelflame)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,6 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* Logical canvas 1920×1080; CSS scales for fit */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -74,7 +73,7 @@
 
 <!-- Overlays -->
 <div class="overlay">
-  <div id="startCard" class="card">
+  <div id="startCard" class="card" tabindex="0" aria-label="Tap or press Enter to start">
     <h1>Tap to Start</h1>
     <p>Tap again to flap • Best is saved</p>
   </div>
@@ -106,7 +105,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.49a-pixelflame';
+  const VERSION = '1.49b-pixelflame';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -123,7 +122,7 @@
   const PIPE_W    = 180;
   const GAP_MIN   = 310, GAP_MAX = 450;
 
-  // Vertical spacing
+  // Vertical spacing (and first vertical)
   const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);
   const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;
 
@@ -131,33 +130,23 @@
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);  // <- your 6%
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // your 6%
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
 
   // Top & bottom grace
   const TOP_OVERLAP_FRAC    = 0.30;
   const BOTTOM_OVERLAP_FRAC = 0.75;
 
-  // -------- Pixel Rocket Flame settings (chunky, like your GIF) --------
+  // PIXEL FLAME
   const PIXEL_FLAME = {
-    // offscreen pixel grid (low-res), then upscaled with nearest-neighbor
     gridW: 64, gridH: 32,
-    // visual size relative to bird
-    lenFrac: 1.0,           // length is ~ bird width
-    heightFrac: 0.65,       // height ~ 65% bird height at nozzle
-    offsetFrac: 0.50,       // nozzle offset behind bird center
-    // colors (from hot core to cool edge)
-    colHot:   '#fff68a',
-    colMid:   '#ff9c3a',
-    colCool:  '#ff3b22',
-    // jaggedness / animation
-    jitter: 2,              // vertical pixel noise in grid space
-    flicker: 0.08,          // ± length change
+    lenFrac: 1.0, heightFrac: 0.65, offsetFrac: 0.50,
+    colHot: '#fff68a', colMid: '#ff9c3a', colCool: '#ff3b22',
+    jitter: 2, flicker: 0.08,
   };
 
-  // Pixel smoke (blocky squares to match the style)
   const SMOKE = [];
-  const SMOKE_RATE = 40; // particles/sec (reduced to keep it clean)
+  const SMOKE_RATE = 40;
   let smokeTimer = 0;
 
   // Flow / phases
@@ -168,7 +157,7 @@
   let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
   let verticalsEnabled = true;
 
-  // Canvas fit (CSS scale only)
+  // Fit canvas
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha:false });
   ctx.imageSmoothingEnabled = true;
@@ -183,9 +172,13 @@
   window.visualViewport && visualViewport.addEventListener('resize', fitCSS, {passive:true});
   fitCSS();
 
-  // Orientation
+  // Orientation gating: only block on **mobile portrait** now
   const rotBlock = document.getElementById('rotBlock');
-  function checkOrientation(){ rotBlock.classList.toggle('show', innerWidth < innerHeight); }
+  let landscapeOK = true;
+  function checkOrientation(){
+    landscapeOK = innerWidth >= innerHeight;
+    rotBlock.classList.toggle('show', isMobile && !landscapeOK);
+  }
   addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
   // UI
@@ -217,7 +210,7 @@
   let started=false, over=false, restartLocked=false;
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
 
-  // AUDIO (flap + hit only — no score sound)
+  // AUDIO (flap + hit only)
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
   function createAudio(){ if(audioReady) return; const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; audioCtx=new AC({latencyHint:"interactive"}); masterGain=audioCtx.createGain(); masterGain.gain.value=muted?0:0.85; masterGain.connect(audioCtx.destination); audioReady=true; }
   async function unlockAudio(){ try{ createAudio(); if(audioCtx && audioCtx.state!=='running'){ await audioCtx.resume(); } }catch(_){ } }
@@ -232,7 +225,7 @@
   // Assets helpers
   function loadImageWithTimeout(src,timeout=6000){ return new Promise((res)=>{ if(!src){ res(null); return; } const img=new Image(); img.referrerPolicy='no-referrer'; let done=false; const finish=v=>{ if(done)return; done=true; res(v||null); }; const t=setTimeout(()=>finish(null),timeout); img.onload=()=>{ clearTimeout(t); finish(img); }; img.onerror=()=>{ clearTimeout(t); finish(null); }; img.src=src; }); }
 
-  // Bird sprite support
+  // Bird sprite / bg
   const BIRD_SPRITE_FRAMES = 4;
   const BIRD_SPRITE_FPS    = 10;
   let birdSprite=null, birdFallbackImg=null, bgImg=null;
@@ -284,7 +277,7 @@
     }
   }
 
-  // ---------- SYSTEM INFO ----------
+  // ---------- SYSTEM INFO (your full descriptions) ----------
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -528,7 +521,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   let bgImg=null;
   function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#ffe77a"; ctx.fillRect(0,0,W,H); } }
 
-  // --------- PIXEL FLAME (like your GIF) ----------
+  // --------- PIXEL FLAME ----------
   const flameCanvas = document.createElement('canvas');
   flameCanvas.width  = PIXEL_FLAME.gridW;
   flameCanvas.height = PIXEL_FLAME.gridH;
@@ -537,84 +530,51 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   function drawPixelFlame(){
     if(!started || over) return;
-
     const ang = bird.computeAngle();
     const fwdX = Math.cos(ang), fwdY = Math.sin(ang);
     const centerX = bird.x + bird.w/2;
     const centerY = bird.yRender;
     const nozzleX = centerX - fwdX * (bird.w * PIXEL_FLAME.offsetFrac);
     const nozzleY = centerY - fwdY * (bird.w * PIXEL_FLAME.offsetFrac);
-
-    // How big the flame should be in world space
     const length = bird.w * (PIXEL_FLAME.lenFrac * (1 + (Math.random()*2-1)*PIXEL_FLAME.flicker));
     const height = bird.h * PIXEL_FLAME.heightFrac;
 
-    // Clear pixel grid
     flameCtx.clearRect(0,0,flameCanvas.width,flameCanvas.height);
-
-    // Build flame in pixel grid from right (nozzle) to left (tail).
-    // Rightmost columns are tallest (near nozzle), then taper down with a jagged edge.
-    const gw = flameCanvas.width, gh = flameCanvas.height;
-    // center line
-    const cy = Math.floor(gh/2);
-
-    // maximum half-height in pixels at nozzle
-    const maxHalf = Math.max(2, Math.floor((height / (height/gh)) / 2)); // approximate; we scale later anyway
-    // For each x (column), compute half-height with linear taper + little noise
+    const gw = flameCanvas.width, gh = flameCanvas.height, cy = Math.floor(gh/2);
     for(let x=0; x<gw; x++){
-      const t = x / (gw-1);              // 0 (tail) .. 1 (nozzle)
-      // taper: bigger near nozzle (t close to 1), smaller at tail
+      const t = x / (gw-1);
       const half = Math.max(1, Math.floor((0.2 + 0.8*t) * (gh*0.45)));
-      // jagged edge
       const jag = (Math.random()*2-1) * PIXEL_FLAME.jitter;
       const hh = Math.max(1, Math.min(gh-1, half + jag));
-
-      // color bands: inner HOT, mid ORANGE, outer RED
       for(let y=-hh; y<=hh; y++){
-        let col;
-        const ay = Math.abs(y);
+        let col; const ay=Math.abs(y);
         if(ay <= hh*0.35) col = PIXEL_FLAME.colHot;
         else if(ay <= hh*0.7) col = PIXEL_FLAME.colMid;
         else col = PIXEL_FLAME.colCool;
-
-        // little “steps” like pixels spilling
-        if(Math.random()<0.09 && ay>hh*0.6){ continue; }
-
+        if(Math.random()<0.09 && ay>hh*0.6) continue;
         flameCtx.fillStyle = col;
         flameCtx.fillRect(x, cy+y, 1, 1);
       }
     }
 
-    // Draw the pixel grid on the main canvas with nearest-neighbor, rotated,
-    // scaled to (length × height). The flame points LEFT from nozzle.
     ctx.save();
     ctx.translate(nozzleX, nozzleY);
     ctx.rotate(ang);
     ctx.imageSmoothingEnabled = false;
-
-    // We want the nozzle to be at the RIGHT edge of the pixel image.
-    // So we draw the grid such that its right side touches the origin.
-    const drawW = length;                      // world pixels width
-    const drawH = height;                      // world pixels height
-    const pxScaleX = drawW / gw;
-    const pxScaleY = drawH / gh;
-
-    // Position so that right edge at x=0, centered vertically
+    const drawW = length, drawH = height;
+    const gwW = gw, ghH = gh;
     ctx.translate(0, -drawH/2);
-    ctx.scale(pxScaleX, pxScaleY);
-    ctx.drawImage(flameCanvas, -gw, 0); // shift so right edge (gw) is at x=0
+    ctx.scale(drawW/gwW, drawH/ghH);
+    ctx.drawImage(flameCanvas, -gwW, 0);
     ctx.restore();
     ctx.imageSmoothingEnabled = true;
   }
 
-  // Bird (sprite sheet with fallback)
-  const BIRD_SPRITE_FRAMES = 4;
-  const BIRD_SPRITE_FPS    = 10;
+  // Bird
   const bird={
     x:Math.round(W*0.167), y:Math.round(H*0.5),
     w:Math.round(H*0.069), h:Math.round(H*0.069),
-    v:0, yRender:0, animTime:0,
-    angle:0,
+    v:0, yRender:0, animTime:0, angle:0,
     computeAngle(){ this.angle = Math.max(-0.45, Math.min(0.9, (this.v/600)*0.5)); return this.angle; },
     draw(frameDt){
       const ang = this.computeAngle();
@@ -644,7 +604,6 @@ For high-density storage of relatively small and light items in tight quarters, 
   const MAX_FRAME_DT=0.12;
 
   function updateSmoke(frameDt){
-    // spawn rate
     smokeTimer += frameDt * SMOKE_RATE;
     while (smokeTimer >= 1) {
       smokeTimer--;
@@ -653,42 +612,30 @@ For high-density storage of relatively small and light items in tight quarters, 
         const fwdX = Math.cos(ang), fwdY = Math.sin(ang);
         const nozzleX = bird.x + bird.w/2 - fwdX * (bird.w * PIXEL_FLAME.offsetFrac);
         const nozzleY = bird.yRender - fwdY * (bird.w * PIXEL_FLAME.offsetFrac);
-
         SMOKE.push({
-          x: nozzleX,
-          y: nozzleY,
-          size: Math.floor(6 + Math.random()*6), // pixel block size
+          x: nozzleX, y: nozzleY,
+          size: Math.floor(6 + Math.random()*6),
           vX: -fwdX * (80 + Math.random()*40),
           vY: -fwdY * (80 + Math.random()*40) + (Math.random()*30-15),
-          life: 0.7 + Math.random()*0.4,
-          age: 0,
+          life: 0.7 + Math.random()*0.4, age: 0,
           shade: 180 + Math.floor(Math.random()*50),
         });
       }
     }
   }
-
   function drawSmoke(frameDt){
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
+    ctx.save(); ctx.imageSmoothingEnabled = false;
     for (let i = SMOKE.length-1; i >= 0; i--) {
-      const p = SMOKE[i];
-      p.age += frameDt;
+      const p = SMOKE[i]; p.age += frameDt;
       if (p.age > p.life) { SMOKE.splice(i,1); continue; }
       const t = p.age / p.life;
-      p.x += p.vX * frameDt;
-      p.y += p.vY * frameDt;
-      p.vY -= 8 * frameDt; // buoyancy
-
-      const alpha = (1 - t) * 0.35;
-      const s = Math.max(4, Math.floor(p.size * (1 + t*1.2)));
+      p.x += p.vX * frameDt; p.y += p.vY * frameDt; p.vY -= 8 * frameDt;
+      const alpha = (1 - t) * 0.35, s = Math.max(4, Math.floor(p.size * (1 + t*1.2)));
       ctx.fillStyle = `rgba(${p.shade},${p.shade},${p.shade},${alpha})`;
-      // snap to pixel grid for crisp blocks
       const px = Math.round(p.x - s/2), py = Math.round(p.y - s/2);
       ctx.fillRect(px, py, s, s);
     }
-    ctx.imageSmoothingEnabled = true;
-    ctx.restore();
+    ctx.imageSmoothingEnabled = true; ctx.restore();
   }
 
   function loop(ts){
@@ -700,7 +647,6 @@ For high-density storage of relatively small and light items in tight quarters, 
         stepObstacles(STEP);
         bird.step(STEP);
 
-        // Top/bottom grace
         const INSET = 8;
         bird.yRender = bird.y;
         const topAllowancePx = bird.h * TOP_OVERLAP_FRAC;
@@ -714,23 +660,11 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     ctx.clearRect(0,0,W,H);
     drawBackground();
-
-    // Interpolated bird position
     bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
-
-    // Pixel smoke (behind obstacles & bird)
-    updateSmoke(frameDt);
-    drawSmoke(frameDt);
-
-    // Obstacles
+    updateSmoke(frameDt); drawSmoke(frameDt);
     drawObstaclesInterpolated(leftover);
-
-    // Pixel flame (in front of smoke, behind bird)
     drawPixelFlame();
-
-    // Bird
     bird.draw(frameDt);
-
     if(started && !over) collideAndScore(leftover);
 
     // version (small grey)
@@ -741,7 +675,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     requestAnimationFrame(loop);
   }
 
-  // Game over / system card
   function endGame(hitStyleIdx){
     if(over) return; over=true; bird.v=0; playHit();
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
@@ -788,22 +721,25 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   async function handleTap(e){
     e?.preventDefault?.(); e?.stopPropagation?.();
+    // Only block on MOBILE + portrait
+    if (isMobile && !landscapeOK) return;
     await unlockAudio();
-    if(!rotBlock.classList.contains('show')){
-      if(!started){ startGame(); bird.flap(); return; }
-      if(!over){ bird.flap(); return; }
-      if(!restartLocked) startGame();
-    }
+    if(!started){ startGame(); bird.flap(); return; }
+    if(!over){ bird.flap(); return; }
+    if(!restartLocked) startGame();
   }
 
-  // Input
+  // Input (liberal start)
   startCard.addEventListener('click', handleTap, {passive:false});
   startCard.addEventListener('touchstart', handleTap, {passive:false});
+  startCard.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ handleTap(e); }}, {passive:false});
+
   document.addEventListener('pointerdown', (e)=>{
     if (e.target.closest('#gameOverCard')) return;
     if (e.target.closest('#muteBtn, #fsBtn')) return;
     handleTap(e);
   }, {passive:false, capture:true});
+
   document.addEventListener('keydown', async (e)=>{
     if(e.code==='Space'||e.key===' '){ await handleTap(e); }
   }, {passive:false});
@@ -832,4 +768,3 @@ For high-density storage of relatively small and light items in tight quarters, 
 </script>
 </body>
 </html>
-```0
