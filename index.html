@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.48-rocketbird)</title>
+<title>Flappy Mo — Local Assets (v1.48b-rocket-plume)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,7 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* Logical canvas is 1920×1080; CSS scales to fit */
+  /* Logical canvas 1920×1080; CSS scales (keeps motion smooth) */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -106,7 +106,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.48-rocketbird';
+  const VERSION = '1.48b-rocket-plume';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -127,29 +127,29 @@
   const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);
   const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;
 
-  // Horizontal challenge spacing (after each 10 verticals)
+  // Horizontal challenge (after each 10 verticals)
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);  // 6%
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // 6% (remember)
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
 
   // Top & bottom grace
   const TOP_OVERLAP_FRAC    = 0.30;
   const BOTTOM_OVERLAP_FRAC = 0.75;
 
-  // Jet flame config
+  // ------- ROCKET EXHAUST (high-contrast, short, intense) -------
   const JET_ENABLED      = true;
   const JET_MAX_PARTICLES= 220;
-  const JET_SPAWN_RATE   = 90;      // per second base
-  const JET_FLAP_BURST   = 0.14;    // seconds of boosted spawn after flap
-  const JET_OFFSET_SCALE = 0.55;    // how far behind the bird (× bird.w)
-  const JET_SPREAD       = 0.22;    // lateral spread
-  const JET_LEN_BASE     = 380;     // base exhaust length in px/sec
-  const JET_LEN_V_MULT   = 0.22;    // extra length with |vertical speed|
-  const JET_SIZE         = 8;       // particle radius base (px)
-  const JET_FADE         = 0.65;    // particle life (s)
-  const JET_GLOW_ALPHA   = 0.28;    // overall glow intensity
+  const JET_SPAWN_RATE   = 200;    // ↑ dense
+  const JET_FLAP_BURST   = 0.18;   // short boost after flap
+  const JET_OFFSET_SCALE = 0.52;   // distance behind bird (× bird.w)
+  const JET_SPREAD       = 0.10;   // narrow cone
+  const JET_LEN_BASE     = 160;    // short plume
+  const JET_LEN_V_MULT   = 0.18;   // slight length change with |v|
+  const JET_SIZE         = 9;      // base radius
+  const JET_FADE         = 0.35;   // short life
+  const JET_GLOW_ALPHA   = 0.55;   // bright additive glow
 
   // Flow / phases
   let phase = 'VERTICALS';
@@ -244,13 +244,13 @@
   ];
   const Raw={ bottoms:[], tops:[] };
   const Styles=[];
-  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,drawW,120);} return c; }
+  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
   function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
     if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.imageSmoothingEnabled=true; g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
     const scale = drawW / (img.naturalWidth || img.width);
     const scaledH = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
     const capH    = Math.max(1, Math.round(capPxSrc * scale));
-    const full = document.createElement('canvas'); full.width = drawW; full.height = scaledH; const gfull = full.getContext('2d'); gfull.imageSmoothingEnabled=true; gfull.drawImage(img,0,0,drawW,scaledH);
+    const full = makeScaledCanvas(img, drawW, scaledH);
     const cap  = document.createElement("canvas");
     const body = document.createElement("canvas");
     cap.width = drawW; cap.height = Math.min(capH, scaledH);
@@ -314,7 +314,7 @@ library management.`,
         ["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],
         ["Load per Level","3\" Beam : 1,000lbs per pair of beam (454 kg)"],
         ["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],
-        ["Height","4' to 8' (1.2 m to 2.4 m)"],
+        ["Height","4' to 8' (1.2 m - 2.4 m)"],
         ["Depth","Up to 20' (6.1 m)"]
       ]
     },
@@ -519,7 +519,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   // Background
-  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); } }
+  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#ffe77a"; ctx.fillRect(0,0,W,H); } } // default yellowish
 
   // --------- JET PARTICLES ----------
   const jetPool = new Array(JET_MAX_PARTICLES).fill(null).map(()=>({alive:false,x:0,y:0,vx:0,vy:0,ttl:0,life:0,sz:0}));
@@ -527,31 +527,38 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   function spawnJet(dt, angle){
     if(!JET_ENABLED) return;
-    // base spawn scaled by dt + flap boost
-    const boost = Math.max(0, flapBoostTimer / JET_FLAP_BURST); // 0..1
-    const spawnCount = Math.min(12, Math.round((JET_SPAWN_RATE * (1+0.9*boost)) * dt));
-    const speed = JET_LEN_BASE + JET_LEN_V_MULT * Math.abs(bird.v);
-    // exhaust direction = opposite of nose
+    // Throttle stronger when rising (engine firing)
+    const riseFactor = Math.max(0, Math.min(1, (-bird.v)/900)); // 0..1 when v is negative (going up)
+    const boost = Math.max(0, flapBoostTimer / JET_FLAP_BURST); // 0..1 after flap
+    const density = 1 + 1.2*riseFactor + 0.8*boost;
+    const spawnCount = Math.min(16, Math.round(JET_SPAWN_RATE * density * dt));
+
+    const speed = (JET_LEN_BASE + JET_LEN_V_MULT * Math.abs(bird.v));
     const dir = angle + Math.PI;
     const nx = Math.cos(dir), ny = Math.sin(dir);
-    // exhaust origin slightly behind bird center
+
     const ox = bird.x + bird.w/2 - nx * (bird.w * JET_OFFSET_SCALE);
-    const oy = bird.yRender + 0; // centered vertically
+    const oy = bird.yRender;
+
     let spawned=0;
     for(let i=0;i<jetPool.length && spawned<spawnCount;i++){
       const p = jetPool[i];
       if(p.alive) continue;
       p.alive = true;
-      // lateral jitter around exhaust axis
+
+      // tight cone
       const jitter = (Math.random()*2-1) * JET_SPREAD * bird.h;
-      const jx = -ny * jitter, jy = nx * jitter; // perpendicular
+      const jx = -ny * jitter, jy = nx * jitter;
+
       p.x = ox + jx; p.y = oy + jy;
-      const vscale = speed * (0.75 + Math.random()*0.5);
-      p.vx = nx * vscale + (Math.random()*2-1)*60;
-      p.vy = ny * vscale + (Math.random()*2-1)*60;
-      p.ttl = JET_FADE * (0.8 + Math.random()*0.5);
+
+      const vscale = speed * (0.85 + Math.random()*0.3);
+      p.vx = nx * vscale + (Math.random()*2-1)*40;
+      p.vy = ny * vscale + (Math.random()*2-1)*40;
+
+      p.ttl = JET_FADE * (0.9 + Math.random()*0.3);
       p.life= 0;
-      p.sz  = JET_SIZE * (0.6 + Math.random()*0.8);
+      p.sz  = JET_SIZE * (0.7 + Math.random()*0.6);
       spawned++;
     }
   }
@@ -565,29 +572,40 @@ For high-density storage of relatively small and light items in tight quarters, 
       if(p.life >= p.ttl){ p.alive = false; continue; }
       p.x += p.vx * dt;
       p.y += p.vy * dt;
-      // slight taper
       p.sz *= 0.985;
     }
   }
 
   function drawJet(){
     if(!JET_ENABLED) return;
-    // Additive glow
     const prevComp = ctx.globalCompositeOperation;
     const prevAlpha= ctx.globalAlpha;
     ctx.globalCompositeOperation = 'lighter';
+
     for(const p of jetPool){
       if(!p.alive) continue;
       const t = p.life / p.ttl; // 0..1
-      // inner core (white/yellow)
-      ctx.globalAlpha = (1 - t) * (0.8 * JET_GLOW_ALPHA);
-      ctx.fillStyle = 'rgba(255, 200, 80, 1)';
-      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*0.45), 0, Math.PI*2); ctx.fill();
-      // outer glow (orange/red)
-      ctx.globalAlpha = (1 - t) * (0.45 * JET_GLOW_ALPHA);
-      ctx.fillStyle = 'rgba(255, 120, 40, 1)';
-      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz), 0, Math.PI*2); ctx.fill();
+
+      // Core (very bright white→yellow)
+      ctx.globalAlpha = (1 - t) * (0.95 * JET_GLOW_ALPHA);
+      ctx.fillStyle = 'rgba(255, 245, 210, 1)'; // warm white
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*0.42), 0, Math.PI*2); ctx.fill();
+
+      // Mid glow (yellow)
+      ctx.globalAlpha = (1 - t) * (0.65 * JET_GLOW_ALPHA);
+      ctx.fillStyle = 'rgba(255, 220, 120, 1)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*0.75), 0, Math.PI*2); ctx.fill();
+
+      // Outer glow (orange/red) — high contrast on yellow bg
+      ctx.globalAlpha = (1 - t) * (0.50 * JET_GLOW_ALPHA);
+      ctx.fillStyle = 'rgba(255, 110, 40, 1)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*1.15), 0, Math.PI*2); ctx.fill();
+
+      ctx.globalAlpha = (1 - t) * (0.35 * JET_GLOW_ALPHA);
+      ctx.fillStyle = 'rgba(255, 40, 40, 1)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.sz*1.6), 0, Math.PI*2); ctx.fill();
     }
+
     ctx.globalAlpha = prevAlpha;
     ctx.globalCompositeOperation = prevComp;
   }
@@ -652,21 +670,19 @@ For high-density storage of relatively small and light items in tight quarters, 
     drawBackground();
     bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
 
-    // Spawn jet using current angle & position
+    // Exhaust
     if(started && !over && JET_ENABLED){
       const ang = bird.computeAngle();
       spawnJet(frameDt, ang);
     }
 
     drawObstaclesInterpolated(leftover);
-    // draw jet behind the bird
-    drawJet();
-    // draw bird
+    drawJet();        // behind bird
     bird.draw(frameDt);
 
     if(started && !over) collideAndScore(leftover);
 
-    // version tag (small grey)
+    // version (small grey)
     ctx.fillStyle='rgba(120,120,120,0.95)';
     ctx.font='700 8px Montserrat,system-ui';
     ctx.fillText('v'+VERSION, 14, H-14);
@@ -676,7 +692,7 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   // Game over / system card
   function endGame(hitStyleIdx){
-    if(over) return; over=true; bird.v=0; playHit();
+    if(over) return; over=true; bird.v=0; crash();
     finalScoreP.textContent = `Score: ${score} • Best: ${best}`;
     const box=document.getElementById('sysInfoBox'), imgEl=document.getElementById('sysImg'), tEl=document.getElementById('sysTitle'), bEl=document.getElementById('sysBlurb'), specsBox=document.getElementById('sysSpecsBox'), sEl=document.getElementById('sysSpecs'), lEl=document.getElementById('sysLinks');
 
@@ -711,7 +727,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
-    // clear jet pool
     for(const p of jetPool){ p.alive=false; }
     flapBoostTimer = 0;
 
