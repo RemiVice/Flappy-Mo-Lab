@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.48f-rocket-teardrop)</title>
+<title>Flappy Mo — Local Assets (v1.48g-rocket-smoke)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -106,7 +106,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.48f-rocket-teardrop';
+  const VERSION = '1.48g-rocket-smoke';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -131,29 +131,34 @@
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);  // (your chosen 6%)
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // your chosen 6%
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
 
-  // Top & bottom grace (keep your tuned values)
+  // Top & bottom grace
   const TOP_OVERLAP_FRAC    = 0.30;
   const BOTTOM_OVERLAP_FRAC = 0.75;
 
   // -------- Rocket Flame: premium teardrop with shock diamonds --------
-  // Requirements: narrow to the LEFT (tail), widest at nozzle near bird.
+  // Narrow to the LEFT (tail), widest at nozzle near bird.
   const FLAME = {
-    lenFrac: 1.00,        // len ≈ bird.w
-    nozzleHalfFrac: 0.30, // width at nozzle (× bird.h) -> hotter/wider near bird
-    tailHalfFrac: 0.05,   // narrow at tail (left)
-    offsetFrac: 0.50,     // how far behind bird center nozzle starts
+    lenFrac: 1.00,
+    nozzleHalfFrac: 0.30,
+    tailHalfFrac: 0.05,
+    offsetFrac: 0.50,
     coreAlpha: 1.00,
     glowAlpha: 0.70,
-    shimmerAmp: 0.035,    // subtle width modulation
-    flickerAmp: 0.05,     // length/intensity flicker
+    shimmerAmp: 0.035,
+    flickerAmp: 0.05,
     flapBoostDur: 0.22,
-    diamonds: [0.22, 0.46, 0.70], // along length (0..1)
+    diamonds: [0.22, 0.46, 0.70],
   };
   let flapBoostTimer = 0;
   let tNow = 0;
+
+  // --------- Smoke particle system (subtle exhaust plume) ----------
+  const SMOKE = [];
+  const SMOKE_RATE = 60; // particles/sec
+  let smokeTimer = 0;
 
   // Flow / phases
   let phase = 'VERTICALS';
@@ -526,10 +531,9 @@ For high-density storage of relatively small and light items in tight quarters, 
   function drawFlame(){
     if(!started || over) return;
 
-    // Direction vectors from bird angle
     const ang = bird.computeAngle();
-    const fwdX = Math.cos(ang), fwdY = Math.sin(ang);        // forward (nose, to the right)
-    const rightX = -Math.sin(ang), rightY = Math.cos(ang);   // +90°
+    const fwdX = Math.cos(ang), fwdY = Math.sin(ang);
+    const rightX = -Math.sin(ang), rightY = Math.cos(ang);
 
     // Nozzle position: behind bird center
     const centerX = bird.x + bird.w/2;
@@ -538,7 +542,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     const nozzleY = centerY - fwdY * (bird.w * FLAME.offsetFrac);
 
     // Dynamics
-    const riseFactor = Math.max(0, Math.min(1, (-bird.v)/900)); // stronger when rising
+    const riseFactor = Math.max(0, Math.min(1, (-bird.v)/900));
     const boost = Math.max(0, Math.min(1, flapBoostTimer / FLAME.flapBoostDur));
     tNow += 1/60;
 
@@ -553,13 +557,12 @@ For high-density storage of relatively small and light items in tight quarters, 
     const wNoz = bird.h * FLAME.nozzleHalfFrac * (1 + 0.18*riseFactor + 0.25*boost);
     const wTailBase = bird.h * FLAME.tailHalfFrac;
     const shimmer = 1 + FLAME.shimmerAmp * Math.sin(tNow * 50);
-
     const wTail = wTailBase * shimmer;
 
-    // Quadratic-teardrop outline (glow first, then core)
+    // Teardrop outline
     const midX = (nozzleX + tailX) * 0.5;
     const midY = (nozzleY + tailY) * 0.5;
-    const ctrlPush = wNoz * 0.65; // how round the belly is
+    const ctrlPush = wNoz * 0.65;
 
     const prevComp = ctx.globalCompositeOperation;
 
@@ -573,16 +576,12 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     ctx.fillStyle = glowGrad;
     ctx.beginPath();
-    // start right edge at nozzle (upper)
     ctx.moveTo(nozzleX + rightX*wNoz*1.35, nozzleY + rightY*wNoz*1.35);
-    // curve to tail (upper edge)
     ctx.quadraticCurveTo(
       midX + rightX*ctrlPush*1.35, midY + rightY*ctrlPush*1.35,
       tailX + rightX*wTail*1.3,    tailY + rightY*wTail*1.3
     );
-    // line across tail to lower edge
     ctx.lineTo(tailX - rightX*wTail*1.3, tailY - rightY*wTail*1.3);
-    // curve back to nozzle (lower edge)
     ctx.quadraticCurveTo(
       midX - rightX*ctrlPush*1.35, midY - rightY*ctrlPush*1.35,
       nozzleX - rightX*wNoz*1.35,  nozzleY - rightY*wNoz*1.35
@@ -590,7 +589,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     ctx.closePath();
     ctx.fill();
 
-    // --- Core (non-additive, white-hot interior) ---
+    // --- Core (non-additive) ---
     const coreGrad = ctx.createLinearGradient(nozzleX,nozzleY,tailX,tailY);
     coreGrad.addColorStop(0.00, `rgba(255,255,255,${FLAME.coreAlpha})`);
     coreGrad.addColorStop(0.38, `rgba(255,240,130,${FLAME.coreAlpha*0.98})`);
@@ -612,7 +611,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     ctx.closePath();
     ctx.fill();
 
-    // --- Shock diamonds (tiny hot pulses along centerline) ---
+    // --- Shock diamonds (tiny pulses) ---
     ctx.globalCompositeOperation = "lighter";
     for(const s of FLAME.diamonds){
       const cx = nozzleX*(1-s) + tailX*s;
@@ -630,7 +629,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
     ctx.globalCompositeOperation = prevComp;
 
-    // decay boost timer
     if (flapBoostTimer > 0) {
       flapBoostTimer = Math.max(0, flapBoostTimer - 1/120);
     }
@@ -670,6 +668,64 @@ For high-density storage of relatively small and light items in tight quarters, 
   let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
   const MAX_FRAME_DT=0.12;
 
+  function updateSmoke(frameDt){
+    // spawn based on rate
+    smokeTimer += frameDt * SMOKE_RATE;
+    while (smokeTimer >= 1) {
+      smokeTimer--;
+      if (started && !over) {
+        const ang = bird.computeAngle();
+        const fwdX = Math.cos(ang), fwdY = Math.sin(ang);
+        const nozzleX = bird.x + bird.w/2 - fwdX * (bird.w * FLAME.offsetFrac);
+        const nozzleY = bird.yRender - fwdY * (bird.w * FLAME.offsetFrac);
+        const base = 50 + Math.random()*50;
+
+        SMOKE.push({
+          x: nozzleX,
+          y: nozzleY,
+          r: Math.random()*10 + 6,                // initial radius
+          vX: -fwdX * base + (Math.random()*20-10),
+          vY: -fwdY * base + (Math.random()*20-10),
+          life: 0.9 + Math.random()*0.5,
+          age: 0,
+          shade: 180 + Math.floor(Math.random()*50), // 180..230 grey
+        });
+      }
+    }
+  }
+
+  function drawSmoke(frameDt){
+    for (let i = SMOKE.length-1; i >= 0; i--) {
+      const p = SMOKE[i];
+      p.age += frameDt;
+      if (p.age > p.life) { SMOKE.splice(i,1); continue; }
+
+      const t = p.age / p.life;
+      p.x += p.vX * frameDt;
+      p.y += p.vY * frameDt;
+
+      // Gentle upward drift to mimic buoyancy
+      p.vY -= 6 * frameDt;
+
+      const alpha = (1 - t) * 0.28;         // fade out
+      const radius = p.r * (1 + t*2.4);     // expand
+
+      // Slight non-uniformity looks nicer
+      ctx.save();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.x+p.y)*0.0005);
+      ctx.scale(1.0 + t*0.4, 1.0 + t*0.2);
+
+      ctx.fillStyle = `rgba(${p.shade},${p.shade},${p.shade},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI*2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; lastTs=ts;
 
@@ -693,14 +749,21 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     ctx.clearRect(0,0,W,H);
     drawBackground();
+
+    // Interpolated bird position
     bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
 
+    // --- Smoke update & draw (behind everything except background) ---
+    updateSmoke(frameDt);
+    drawSmoke(frameDt);
+
+    // Obstacles
     drawObstaclesInterpolated(leftover);
 
-    // Draw flame BEFORE the bird so it appears behind
+    // Flame behind the bird, in front of smoke
     drawFlame();
 
-    // Draw bird
+    // Bird
     bird.draw(frameDt);
 
     if(started && !over) collideAndScore(leftover);
@@ -750,12 +813,12 @@ For high-density storage of relatively small and light items in tight quarters, 
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
+    SMOKE.length=0; smokeTimer=0; flapBoostTimer=0;
 
     phase='VERTICALS'; bufferTime=0; challengeQueued=false; verticalsPassed=0;
     nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS; verticalsEnabled = true;
 
     startCard.classList.add('hidden'); gameOverCard.classList.add('hidden');
-    flapBoostTimer = 0;
   }
 
   async function handleTap(e){
