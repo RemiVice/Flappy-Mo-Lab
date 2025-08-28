@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.48c-rocket-flame)</title>
+<title>Flappy Mo — Local Assets (v1.48d-rocket-cone)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,7 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* Logical canvas 1920×1080; CSS scales to fit (keeps motion smooth) */
+  /* Logical canvas 1920×1080; CSS scales for fit (keeps motion smooth) */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -49,7 +49,7 @@
     max-width:100%; max-height:240px; object-fit:contain;
     background:rgba(255,255,255,.06);
     border:1px solid rgba(255,255,255,.1);
-    border-radius:10px; margin:10px auto;
+    border-radius:10px; margin:10px auto; /* centers image */
     display:none; opacity:0; transition:opacity .25s ease;
   }
   #sysInfoBox, #sysInfoBox * { color:#fff !important; }
@@ -106,7 +106,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.48c-rocket-flame';
+  const VERSION = '1.48d-rocket-cone';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -131,28 +131,27 @@
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);  // (remember: you set 6%)
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // you set 6%
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
 
   // Top & bottom grace
   const TOP_OVERLAP_FRAC    = 0.30;
   const BOTTOM_OVERLAP_FRAC = 0.75;
 
-  // ------- ROCKET FLAME (short, parallel, intense) -------
-  // The flame is drawn as two layered quads (core + glow), aligned with bird angle.
-  // Length ~ bird width; intensity bumps on flap and when rising.
+  // ------- ROCKET FLAME (short, hot, aligned) -------
+  // Narrow at nozzle (near bird), wider at tail (farther back), always parallel to bird.
   const FLAME = {
-    lenFrac: 1.00,      // length ~= bird.w * lenFrac
-    baseHalfFrac: 0.08, // half-width near nozzle (× bird.h)
-    tailHalfFrac: 0.22, // half-width at tail  (× bird.h)
-    offsetFrac: 0.52,   // how far behind bird center to start (× bird.w)
-    coreAlpha: 0.95,    // core opacity
-    glowAlpha: 0.65,    // overall glow intensity
-    flapBoostDur: 0.20, // seconds
-    flickerAmp: 0.06,   // ±6% subtle flicker
+    lenFrac: 1.00,      // length ~= bird.w
+    nozzleHalfFrac: 0.10, // half-width near nozzle (× bird.h)
+    tailHalfFrac: 0.30,   // half-width at tail   (× bird.h)
+    offsetFrac: 0.55,     // start behind bird center (× bird.w)
+    coreAlpha: 0.98,
+    glowAlpha: 0.70,
+    flapBoostDur: 0.20,
+    flickerAmp: 0.05
   };
   let flapBoostTimer = 0;
-  let tNow = 0; // for flicker
+  let tNow = 0;
 
   // Flow / phases
   let phase = 'VERTICALS';
@@ -227,12 +226,9 @@
   function loadImageWithTimeout(src,timeout=6000){ return new Promise((res)=>{ if(!src){ res(null); return; } const img=new Image(); img.referrerPolicy='no-referrer'; let done=false; const finish=v=>{ if(done)return; done=true; res(v||null); }; const t=setTimeout(()=>finish(null),timeout); img.onload=()=>{ clearTimeout(t); finish(img); }; img.onerror=()=>{ clearTimeout(t); finish(null); }; img.src=src; }); }
 
   // Bird sprite support
-  const BIRD_SPRITE_URL    = "assets/bird-sprite.png"; // 4 frames in a row
   const BIRD_SPRITE_FRAMES = 4;
   const BIRD_SPRITE_FPS    = 10;
-  let birdSprite=null, birdFallbackImg=null;
-
-  let bgImg=null;
+  let birdSprite=null, birdFallbackImg=null, bgImg=null;
 
   // Pipe styles
   const PIPE_STYLES_CFG = [
@@ -521,10 +517,10 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   }
 
-  // Background (yellow default to test contrast)
+  // Background (yellow default to test contrast if bg missing)
   function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#ffe77a"; ctx.fillRect(0,0,W,H); } }
 
-  // --------- ROCKET FLAME DRAWING ----------
+  // --------- ROCKET FLAME (hot cone) ----------
   function drawFlame(){
     if(!started || over) return;
 
@@ -533,81 +529,60 @@ For high-density storage of relatively small and light items in tight quarters, 
     const fwdX = Math.cos(ang), fwdY = Math.sin(ang);        // forward (nose)
     const rightX = -Math.sin(ang), rightY = Math.cos(ang);   // +90°
 
-    // Flame parameters (dynamic)
+    // Behind the bird
     const centerX = bird.x + bird.w/2;
     const centerY = bird.yRender;
-
-    const riseFactor = Math.max(0, Math.min(1, (-bird.v)/900)); // 0..1 when rising
-    const boost = Math.max(0, Math.min(1, flapBoostTimer / FLAME.flapBoostDur));
-    tNow += 0.016; // approx
-
-    const flick = 1 + FLAME.flickerAmp * Math.sin(tNow * 60 + (boost*6));
-    const intensity = 0.95 + 0.7*boost + 0.45*riseFactor; // 1.. ~2
-    const len = bird.w * FLAME.lenFrac * intensity * flick;
-
-    // Nozzle (start) slightly behind bird center, along -forward
     const nozzleX = centerX - fwdX * (bird.w * FLAME.offsetFrac);
     const nozzleY = centerY - fwdY * (bird.w * FLAME.offsetFrac);
 
-    // Tail point
+    // Dynamics: stronger when rising + right after flap
+    const riseFactor = Math.max(0, Math.min(1, (-bird.v)/900)); // 0..1 when rising
+    const boost = Math.max(0, Math.min(1, flapBoostTimer / FLAME.flapBoostDur));
+    tNow += 1/60;
+    const flick = 1 + FLAME.flickerAmp * Math.sin(tNow * 60 + boost*5);
+
+    // Length ~ bird width, modulated
+    const len = bird.w * FLAME.lenFrac * (0.95 + 0.45*riseFactor + 0.55*boost) * flick;
+
+    // Tail farther back (wider there)
     const tailX = nozzleX - fwdX * len;
     const tailY = nozzleY - fwdY * len;
 
     // Widths
-    const baseHalf = bird.h * FLAME.baseHalfFrac;
-    const tailHalf = bird.h * FLAME.tailHalfFrac * intensity;
+    const nozzleHalf = bird.h * FLAME.nozzleHalfFrac;
+    const tailHalf   = bird.h * FLAME.tailHalfFrac * (1 + 0.25*riseFactor + 0.25*boost);
 
-    // Core polygon (narrow)
-    const coreBaseLx = nozzleX + rightX * (baseHalf*0.7);
-    const coreBaseLy = nozzleY + rightY * (baseHalf*0.7);
-    const coreBaseRx = nozzleX - rightX * (baseHalf*0.7);
-    const coreBaseRy = nozzleY - rightY * (baseHalf*0.7);
-    const coreTailLx = tailX   + rightX * (tailHalf*0.60);
-    const coreTailLy = tailY   + rightY * (tailHalf*0.60);
-    const coreTailRx = tailX   - rightX * (tailHalf*0.60);
-    const coreTailRy = tailY   - rightY * (tailHalf*0.60);
+    // --- Core (white/yellow hot) ---
+    const coreGrad = ctx.createLinearGradient(nozzleX,nozzleY,tailX,tailY);
+    coreGrad.addColorStop(0.0, `rgba(255,255,255,${FLAME.coreAlpha})`);      // blinding white at nozzle
+    coreGrad.addColorStop(0.35, `rgba(255,240,120,${FLAME.coreAlpha*0.95})`); // yellow
+    coreGrad.addColorStop(1.0, `rgba(255,180,60,${FLAME.coreAlpha*0.80})`);   // orange
 
-    // Glow polygon (wider)
-    const glowBaseLx = nozzleX + rightX * (baseHalf*1.2);
-    const glowBaseLy = nozzleY + rightY * (baseHalf*1.2);
-    const glowBaseRx = nozzleX - rightX * (baseHalf*1.2);
-    const glowBaseRy = nozzleY - rightY * (baseHalf*1.2);
-    const glowTailLx = tailX   + rightX * (tailHalf*1.20);
-    const glowTailLy = tailY   + rightY * (tailHalf*1.20);
-    const glowTailRx = tailX   - rightX * (tailHalf*1.20);
-    const glowTailRy = tailY   - rightY * (tailHalf*1.20);
-
-    // Core gradient (no additive) — bright white→yellow→orange
-    const gradCore = ctx.createLinearGradient(nozzleX, nozzleY, tailX, tailY);
-    gradCore.addColorStop(0.00, `rgba(255,255,255,${FLAME.coreAlpha})`);
-    gradCore.addColorStop(0.35, `rgba(255,245,160,${FLAME.coreAlpha*0.95})`);
-    gradCore.addColorStop(1.00, `rgba(255,170,60,${FLAME.coreAlpha*0.80})`);
-
-    ctx.fillStyle = gradCore;
+    ctx.fillStyle = coreGrad;
     ctx.beginPath();
-    ctx.moveTo(coreBaseLx, coreBaseLy);
-    ctx.lineTo(coreBaseRx, coreBaseRy);
-    ctx.lineTo(coreTailRx, coreTailRy);
-    ctx.lineTo(coreTailLx, coreTailLy);
+    ctx.moveTo(nozzleX + rightX*nozzleHalf, nozzleY + rightY*nozzleHalf);
+    ctx.lineTo(nozzleX - rightX*nozzleHalf, nozzleY - rightY*nozzleHalf);
+    ctx.lineTo(tailX   - rightX*tailHalf,   tailY   - rightY*tailHalf);
+    ctx.lineTo(tailX   + rightX*tailHalf,   tailY   + rightY*tailHalf);
     ctx.closePath();
     ctx.fill();
 
-    // Glow gradient (additive) — yellow→orange→red, strong contrast on yellow bg
+    // --- Glow (orange/red halo, additive) ---
     const prevComp = ctx.globalCompositeOperation;
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalCompositeOperation = "lighter";
 
-    const gradGlow = ctx.createLinearGradient(nozzleX, nozzleY, tailX, tailY);
     const ga = FLAME.glowAlpha;
-    gradGlow.addColorStop(0.00, `rgba(255,230,120,${ga*0.9})`);
-    gradGlow.addColorStop(0.45, `rgba(255,150,60,${ga*0.75})`);
-    gradGlow.addColorStop(1.00, `rgba(255,40,40,${ga*0.45})`);
+    const glowGrad = ctx.createLinearGradient(nozzleX,nozzleY,tailX,tailY);
+    glowGrad.addColorStop(0.0, `rgba(255,220,120,${ga*0.95})`);
+    glowGrad.addColorStop(0.5, `rgba(255,140,50,${ga*0.75})`);
+    glowGrad.addColorStop(1.0, `rgba(255,40,30,${ga*0.55})`);
 
-    ctx.fillStyle = gradGlow;
+    ctx.fillStyle = glowGrad;
     ctx.beginPath();
-    ctx.moveTo(glowBaseLx, glowBaseLy);
-    ctx.lineTo(glowBaseRx, glowBaseRy);
-    ctx.lineTo(glowTailRx, glowTailRy);
-    ctx.lineTo(glowTailLx, glowTailLy);
+    ctx.moveTo(nozzleX + rightX*nozzleHalf*1.4, nozzleY + rightY*nozzleHalf*1.4);
+    ctx.lineTo(nozzleX - rightX*nozzleHalf*1.4, nozzleY - rightY*nozzleHalf*1.4);
+    ctx.lineTo(tailX   - rightX*tailHalf*1.6,   tailY   - rightY*tailHalf*1.6);
+    ctx.lineTo(tailX   + rightX*tailHalf*1.6,   tailY   + rightY*tailHalf*1.6);
     ctx.closePath();
     ctx.fill();
 
