@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.48g-rocket-smoke)</title>
+<title>Flappy Mo — Local Assets (v1.49a-pixelflame)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,7 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* Logical canvas 1920×1080; CSS scales for fit (keeps motion smooth) */
+  /* Logical canvas 1920×1080; CSS scales for fit */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -49,7 +49,7 @@
     max-width:100%; max-height:240px; object-fit:contain;
     background:rgba(255,255,255,.06);
     border:1px solid rgba(255,255,255,.1);
-    border-radius:10px; margin:10px auto; /* center on card */
+    border-radius:10px; margin:10px auto;
     display:none; opacity:0; transition:opacity .25s ease;
   }
   #sysInfoBox, #sysInfoBox * { color:#fff !important; }
@@ -106,7 +106,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.48g-rocket-smoke';
+  const VERSION = '1.49a-pixelflame';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   // WORLD
@@ -131,33 +131,33 @@
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);  // your chosen 6%
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // <- your 6%
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
 
   // Top & bottom grace
   const TOP_OVERLAP_FRAC    = 0.30;
   const BOTTOM_OVERLAP_FRAC = 0.75;
 
-  // -------- Rocket Flame: premium teardrop with shock diamonds --------
-  // Narrow to the LEFT (tail), widest at nozzle near bird.
-  const FLAME = {
-    lenFrac: 1.00,
-    nozzleHalfFrac: 0.30,
-    tailHalfFrac: 0.05,
-    offsetFrac: 0.50,
-    coreAlpha: 1.00,
-    glowAlpha: 0.70,
-    shimmerAmp: 0.035,
-    flickerAmp: 0.05,
-    flapBoostDur: 0.22,
-    diamonds: [0.22, 0.46, 0.70],
+  // -------- Pixel Rocket Flame settings (chunky, like your GIF) --------
+  const PIXEL_FLAME = {
+    // offscreen pixel grid (low-res), then upscaled with nearest-neighbor
+    gridW: 64, gridH: 32,
+    // visual size relative to bird
+    lenFrac: 1.0,           // length is ~ bird width
+    heightFrac: 0.65,       // height ~ 65% bird height at nozzle
+    offsetFrac: 0.50,       // nozzle offset behind bird center
+    // colors (from hot core to cool edge)
+    colHot:   '#fff68a',
+    colMid:   '#ff9c3a',
+    colCool:  '#ff3b22',
+    // jaggedness / animation
+    jitter: 2,              // vertical pixel noise in grid space
+    flicker: 0.08,          // ± length change
   };
-  let flapBoostTimer = 0;
-  let tNow = 0;
 
-  // --------- Smoke particle system (subtle exhaust plume) ----------
+  // Pixel smoke (blocky squares to match the style)
   const SMOKE = [];
-  const SMOKE_RATE = 60; // particles/sec
+  const SMOKE_RATE = 40; // particles/sec (reduced to keep it clean)
   let smokeTimer = 0;
 
   // Flow / phases
@@ -229,7 +229,7 @@
   const playFlap = ()=> woosh();
   const playHit  = ()=> crash();
 
-  // Assets
+  // Assets helpers
   function loadImageWithTimeout(src,timeout=6000){ return new Promise((res)=>{ if(!src){ res(null); return; } const img=new Image(); img.referrerPolicy='no-referrer'; let done=false; const finish=v=>{ if(done)return; done=true; res(v||null); }; const t=setTimeout(()=>finish(null),timeout); img.onload=()=>{ clearTimeout(t); finish(img); }; img.onerror=()=>{ clearTimeout(t); finish(null); }; img.src=src; }); }
 
   // Bird sprite support
@@ -524,117 +524,92 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   }
 
-  // Background (yellow default to ensure contrast if bg missing)
+  // Background
+  let bgImg=null;
   function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#ffe77a"; ctx.fillRect(0,0,W,H); } }
 
-  // --------- ROCKET FLAME (teardrop with diamonds) ----------
-  function drawFlame(){
+  // --------- PIXEL FLAME (like your GIF) ----------
+  const flameCanvas = document.createElement('canvas');
+  flameCanvas.width  = PIXEL_FLAME.gridW;
+  flameCanvas.height = PIXEL_FLAME.gridH;
+  const flameCtx = flameCanvas.getContext('2d', { alpha:true });
+  flameCtx.imageSmoothingEnabled = false;
+
+  function drawPixelFlame(){
     if(!started || over) return;
 
     const ang = bird.computeAngle();
     const fwdX = Math.cos(ang), fwdY = Math.sin(ang);
-    const rightX = -Math.sin(ang), rightY = Math.cos(ang);
-
-    // Nozzle position: behind bird center
     const centerX = bird.x + bird.w/2;
     const centerY = bird.yRender;
-    const nozzleX = centerX - fwdX * (bird.w * FLAME.offsetFrac);
-    const nozzleY = centerY - fwdY * (bird.w * FLAME.offsetFrac);
+    const nozzleX = centerX - fwdX * (bird.w * PIXEL_FLAME.offsetFrac);
+    const nozzleY = centerY - fwdY * (bird.w * PIXEL_FLAME.offsetFrac);
 
-    // Dynamics
-    const riseFactor = Math.max(0, Math.min(1, (-bird.v)/900));
-    const boost = Math.max(0, Math.min(1, flapBoostTimer / FLAME.flapBoostDur));
-    tNow += 1/60;
+    // How big the flame should be in world space
+    const length = bird.w * (PIXEL_FLAME.lenFrac * (1 + (Math.random()*2-1)*PIXEL_FLAME.flicker));
+    const height = bird.h * PIXEL_FLAME.heightFrac;
 
-    const flick = 1 + FLAME.flickerAmp * Math.sin(tNow * 80 + boost*6);
-    const len = bird.w * FLAME.lenFrac * (0.95 + 0.45*riseFactor + 0.50*boost) * flick;
+    // Clear pixel grid
+    flameCtx.clearRect(0,0,flameCanvas.width,flameCanvas.height);
 
-    // Tail (left/back)
-    const tailX = nozzleX - fwdX * len;
-    const tailY = nozzleY - fwdY * len;
+    // Build flame in pixel grid from right (nozzle) to left (tail).
+    // Rightmost columns are tallest (near nozzle), then taper down with a jagged edge.
+    const gw = flameCanvas.width, gh = flameCanvas.height;
+    // center line
+    const cy = Math.floor(gh/2);
 
-    // Widths (wide at nozzle, narrow at tail)
-    const wNoz = bird.h * FLAME.nozzleHalfFrac * (1 + 0.18*riseFactor + 0.25*boost);
-    const wTailBase = bird.h * FLAME.tailHalfFrac;
-    const shimmer = 1 + FLAME.shimmerAmp * Math.sin(tNow * 50);
-    const wTail = wTailBase * shimmer;
+    // maximum half-height in pixels at nozzle
+    const maxHalf = Math.max(2, Math.floor((height / (height/gh)) / 2)); // approximate; we scale later anyway
+    // For each x (column), compute half-height with linear taper + little noise
+    for(let x=0; x<gw; x++){
+      const t = x / (gw-1);              // 0 (tail) .. 1 (nozzle)
+      // taper: bigger near nozzle (t close to 1), smaller at tail
+      const half = Math.max(1, Math.floor((0.2 + 0.8*t) * (gh*0.45)));
+      // jagged edge
+      const jag = (Math.random()*2-1) * PIXEL_FLAME.jitter;
+      const hh = Math.max(1, Math.min(gh-1, half + jag));
 
-    // Teardrop outline
-    const midX = (nozzleX + tailX) * 0.5;
-    const midY = (nozzleY + tailY) * 0.5;
-    const ctrlPush = wNoz * 0.65;
+      // color bands: inner HOT, mid ORANGE, outer RED
+      for(let y=-hh; y<=hh; y++){
+        let col;
+        const ay = Math.abs(y);
+        if(ay <= hh*0.35) col = PIXEL_FLAME.colHot;
+        else if(ay <= hh*0.7) col = PIXEL_FLAME.colMid;
+        else col = PIXEL_FLAME.colCool;
 
-    const prevComp = ctx.globalCompositeOperation;
+        // little “steps” like pixels spilling
+        if(Math.random()<0.09 && ay>hh*0.6){ continue; }
 
-    // --- Outer Glow (additive) ---
-    ctx.globalCompositeOperation = "lighter";
-    const ga = FLAME.glowAlpha;
-    const glowGrad = ctx.createLinearGradient(nozzleX,nozzleY,tailX,tailY);
-    glowGrad.addColorStop(0.00, `rgba(255,230,140,${ga*0.95})`);
-    glowGrad.addColorStop(0.45, `rgba(255,150,60,${ga*0.75})`);
-    glowGrad.addColorStop(1.00, `rgba(255,40,25,${ga*0.55})`);
-
-    ctx.fillStyle = glowGrad;
-    ctx.beginPath();
-    ctx.moveTo(nozzleX + rightX*wNoz*1.35, nozzleY + rightY*wNoz*1.35);
-    ctx.quadraticCurveTo(
-      midX + rightX*ctrlPush*1.35, midY + rightY*ctrlPush*1.35,
-      tailX + rightX*wTail*1.3,    tailY + rightY*wTail*1.3
-    );
-    ctx.lineTo(tailX - rightX*wTail*1.3, tailY - rightY*wTail*1.3);
-    ctx.quadraticCurveTo(
-      midX - rightX*ctrlPush*1.35, midY - rightY*ctrlPush*1.35,
-      nozzleX - rightX*wNoz*1.35,  nozzleY - rightY*wNoz*1.35
-    );
-    ctx.closePath();
-    ctx.fill();
-
-    // --- Core (non-additive) ---
-    const coreGrad = ctx.createLinearGradient(nozzleX,nozzleY,tailX,tailY);
-    coreGrad.addColorStop(0.00, `rgba(255,255,255,${FLAME.coreAlpha})`);
-    coreGrad.addColorStop(0.38, `rgba(255,240,130,${FLAME.coreAlpha*0.98})`);
-    coreGrad.addColorStop(1.00, `rgba(255,180,60,${FLAME.coreAlpha*0.85})`);
-
-    ctx.globalCompositeOperation = prevComp;
-    ctx.fillStyle = coreGrad;
-    ctx.beginPath();
-    ctx.moveTo(nozzleX + rightX*wNoz*0.85, nozzleY + rightY*wNoz*0.85);
-    ctx.quadraticCurveTo(
-      midX + rightX*ctrlPush*0.85, midY + rightY*ctrlPush*0.85,
-      tailX + rightX*wTail*0.7,    tailY + rightY*wTail*0.7
-    );
-    ctx.lineTo(tailX - rightX*wTail*0.7, tailY - rightY*wTail*0.7);
-    ctx.quadraticCurveTo(
-      midX - rightX*ctrlPush*0.85, midY - rightY*ctrlPush*0.85,
-      nozzleX - rightX*wNoz*0.85,  nozzleY - rightY*wNoz*0.85
-    );
-    ctx.closePath();
-    ctx.fill();
-
-    // --- Shock diamonds (tiny pulses) ---
-    ctx.globalCompositeOperation = "lighter";
-    for(const s of FLAME.diamonds){
-      const cx = nozzleX*(1-s) + tailX*s;
-      const cy = nozzleY*(1-s) + tailY*s;
-      const size = (wNoz*0.33)*(1 - s*0.7) * (1 + 0.25*boost);
-      const radGrad = ctx.createRadialGradient(cx,cy,0, cx,cy,size);
-      const pulse = 0.65 + 0.35*Math.sin(tNow*70 + s*8 + boost*10);
-      radGrad.addColorStop(0.00, `rgba(255,255,255,${0.95*pulse})`);
-      radGrad.addColorStop(0.35, `rgba(255,240,140,${0.75*pulse})`);
-      radGrad.addColorStop(1.00, `rgba(255,100,20,${0.35*pulse})`);
-      ctx.fillStyle = radGrad;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, size, size*0.72, ang, 0, Math.PI*2);
-      ctx.fill();
+        flameCtx.fillStyle = col;
+        flameCtx.fillRect(x, cy+y, 1, 1);
+      }
     }
-    ctx.globalCompositeOperation = prevComp;
 
-    if (flapBoostTimer > 0) {
-      flapBoostTimer = Math.max(0, flapBoostTimer - 1/120);
-    }
+    // Draw the pixel grid on the main canvas with nearest-neighbor, rotated,
+    // scaled to (length × height). The flame points LEFT from nozzle.
+    ctx.save();
+    ctx.translate(nozzleX, nozzleY);
+    ctx.rotate(ang);
+    ctx.imageSmoothingEnabled = false;
+
+    // We want the nozzle to be at the RIGHT edge of the pixel image.
+    // So we draw the grid such that its right side touches the origin.
+    const drawW = length;                      // world pixels width
+    const drawH = height;                      // world pixels height
+    const pxScaleX = drawW / gw;
+    const pxScaleY = drawH / gh;
+
+    // Position so that right edge at x=0, centered vertically
+    ctx.translate(0, -drawH/2);
+    ctx.scale(pxScaleX, pxScaleY);
+    ctx.drawImage(flameCanvas, -gw, 0); // shift so right edge (gw) is at x=0
+    ctx.restore();
+    ctx.imageSmoothingEnabled = true;
   }
 
   // Bird (sprite sheet with fallback)
+  const BIRD_SPRITE_FRAMES = 4;
+  const BIRD_SPRITE_FPS    = 10;
   const bird={
     x:Math.round(W*0.167), y:Math.round(H*0.5),
     w:Math.round(H*0.069), h:Math.round(H*0.069),
@@ -660,70 +635,60 @@ For high-density storage of relatively small and light items in tight quarters, 
       ctx.restore();
     },
     step(dt){ this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
-    flap(){ this.v=LIFT_V0; playFlap(); flapBoostTimer = FLAME.flapBoostDur; },
+    flap(){ this.v=LIFT_V0; playFlap(); },
     reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; this.angle=0; }
   };
 
-  // Semi-fixed timestep + interpolation (smooth at 60Hz+)
+  // Semi-fixed timestep + interpolation
   let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
   const MAX_FRAME_DT=0.12;
 
   function updateSmoke(frameDt){
-    // spawn based on rate
+    // spawn rate
     smokeTimer += frameDt * SMOKE_RATE;
     while (smokeTimer >= 1) {
       smokeTimer--;
       if (started && !over) {
         const ang = bird.computeAngle();
         const fwdX = Math.cos(ang), fwdY = Math.sin(ang);
-        const nozzleX = bird.x + bird.w/2 - fwdX * (bird.w * FLAME.offsetFrac);
-        const nozzleY = bird.yRender - fwdY * (bird.w * FLAME.offsetFrac);
-        const base = 50 + Math.random()*50;
+        const nozzleX = bird.x + bird.w/2 - fwdX * (bird.w * PIXEL_FLAME.offsetFrac);
+        const nozzleY = bird.yRender - fwdY * (bird.w * PIXEL_FLAME.offsetFrac);
 
         SMOKE.push({
           x: nozzleX,
           y: nozzleY,
-          r: Math.random()*10 + 6,                // initial radius
-          vX: -fwdX * base + (Math.random()*20-10),
-          vY: -fwdY * base + (Math.random()*20-10),
-          life: 0.9 + Math.random()*0.5,
+          size: Math.floor(6 + Math.random()*6), // pixel block size
+          vX: -fwdX * (80 + Math.random()*40),
+          vY: -fwdY * (80 + Math.random()*40) + (Math.random()*30-15),
+          life: 0.7 + Math.random()*0.4,
           age: 0,
-          shade: 180 + Math.floor(Math.random()*50), // 180..230 grey
+          shade: 180 + Math.floor(Math.random()*50),
         });
       }
     }
   }
 
   function drawSmoke(frameDt){
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
     for (let i = SMOKE.length-1; i >= 0; i--) {
       const p = SMOKE[i];
       p.age += frameDt;
       if (p.age > p.life) { SMOKE.splice(i,1); continue; }
-
       const t = p.age / p.life;
       p.x += p.vX * frameDt;
       p.y += p.vY * frameDt;
+      p.vY -= 8 * frameDt; // buoyancy
 
-      // Gentle upward drift to mimic buoyancy
-      p.vY -= 6 * frameDt;
-
-      const alpha = (1 - t) * 0.28;         // fade out
-      const radius = p.r * (1 + t*2.4);     // expand
-
-      // Slight non-uniformity looks nicer
-      ctx.save();
-      ctx.globalCompositeOperation = "source-over";
-      ctx.translate(p.x, p.y);
-      ctx.rotate((p.x+p.y)*0.0005);
-      ctx.scale(1.0 + t*0.4, 1.0 + t*0.2);
-
+      const alpha = (1 - t) * 0.35;
+      const s = Math.max(4, Math.floor(p.size * (1 + t*1.2)));
       ctx.fillStyle = `rgba(${p.shade},${p.shade},${p.shade},${alpha})`;
-      ctx.beginPath();
-      ctx.arc(0, 0, radius, 0, Math.PI*2);
-      ctx.fill();
-
-      ctx.restore();
+      // snap to pixel grid for crisp blocks
+      const px = Math.round(p.x - s/2), py = Math.round(p.y - s/2);
+      ctx.fillRect(px, py, s, s);
     }
+    ctx.imageSmoothingEnabled = true;
+    ctx.restore();
   }
 
   function loop(ts){
@@ -753,15 +718,15 @@ For high-density storage of relatively small and light items in tight quarters, 
     // Interpolated bird position
     bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
 
-    // --- Smoke update & draw (behind everything except background) ---
+    // Pixel smoke (behind obstacles & bird)
     updateSmoke(frameDt);
     drawSmoke(frameDt);
 
     // Obstacles
     drawObstaclesInterpolated(leftover);
 
-    // Flame behind the bird, in front of smoke
-    drawFlame();
+    // Pixel flame (in front of smoke, behind bird)
+    drawPixelFlame();
 
     // Bird
     bird.draw(frameDt);
@@ -813,7 +778,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
-    SMOKE.length=0; smokeTimer=0; flapBoostTimer=0;
+    SMOKE.length=0; smokeTimer=0;
 
     phase='VERTICALS'; bufferTime=0; challengeQueued=false; verticalsPassed=0;
     nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS; verticalsEnabled = true;
@@ -867,3 +832,4 @@ For high-density storage of relatively small and light items in tight quarters, 
 </script>
 </body>
 </html>
+```0
