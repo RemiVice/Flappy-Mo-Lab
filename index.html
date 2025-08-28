@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.47p-spriteBird-perf)</title>
+<title>Flappy Mo — Local Assets (v1.47q-spriteBird-smooth)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,7 +11,7 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
 
-  /* Canvas is visually 1920×1080, internal resolution scales dynamically for perf */
+  /* Logical canvas is always 1920×1080; CSS scales to fit (smoothest motion). */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -19,7 +19,6 @@
     transform-origin:center center;
     background:#000; touch-action:none; image-rendering:auto;
     border-radius:14px; border:1px solid rgba(255,255,255,.08);
-    /* removed heavy shadow for perf */
   }
 
   .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
@@ -107,10 +106,10 @@
 
 <script>
 (() => {
-  const VERSION = '1.47p-spriteBird-perf';
+  const VERSION = '1.47q-spriteBird-smooth';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-  // LOGICAL world size (unchanged gameplay)
+  // WORLD
   const W = 1920, H = 1080;
 
   // Physics
@@ -124,7 +123,7 @@
   const PIPE_W    = 180;
   const GAP_MIN   = 310, GAP_MAX = 450;
 
-  // Vertical spacing (all verticals incl. first)
+  // Vertical spacing
   const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);
   const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;
 
@@ -132,12 +131,12 @@
   const CHALLENGE_BARS   = 3;
   const HORIZ_SPACING_X  = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y   = Math.round(H * 0.18);
-  const BUFFER_PIXELS    = Math.round(W * 0.06);  // you asked to keep 6%
+  const BUFFER_PIXELS    = Math.round(W * 0.06);  // keep 6%
   const HORIZ_LEAD_PIXELS= Math.round(W * 0.08);
 
   // Top & bottom grace
-  const TOP_OVERLAP_FRAC    = 0.30;
-  const BOTTOM_OVERLAP_FRAC = 0.75;
+  const TOP_OVERLAP_FRAC    = 0.30; // 30% allowed above top
+  const BOTTOM_OVERLAP_FRAC = 0.75; // 75% allowed below bottom
 
   // Flow / phases
   let phase = 'VERTICALS';
@@ -148,12 +147,11 @@
   let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
   let verticalsEnabled = true;
 
-  // Canvas + dynamic internal scale
+  // Canvas fit (CSS scale only)
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha:false });
-  ctx.imageSmoothingEnabled = false; // faster & crisp
+  ctx.imageSmoothingEnabled = true;     // <— smooth scrolling again
 
-  // Visual scale (CSS) to fit window
   function fitCSS(){
     const vw = innerWidth;
     const vh = Math.round(window.visualViewport ? visualViewport.height : innerHeight);
@@ -198,7 +196,7 @@
   let started=false, over=false, restartLocked=false;
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent = best;
 
-  // AUDIO (unchanged, only flap + hit)
+  // AUDIO (flap + hit only)
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
   function createAudio(){ if(audioReady) return; const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; audioCtx=new AC({latencyHint:"interactive"}); masterGain=audioCtx.createGain(); masterGain.gain.value=muted?0:0.85; masterGain.connect(audioCtx.destination); audioReady=true; }
   async function unlockAudio(){ try{ createAudio(); if(audioCtx && audioCtx.state!=='running'){ await audioCtx.resume(); } }catch(_){ } }
@@ -214,14 +212,14 @@
   function loadImageWithTimeout(src,timeout=6000){ return new Promise((res)=>{ if(!src){ res(null); return; } const img=new Image(); img.referrerPolicy='no-referrer'; let done=false; const finish=v=>{ if(done)return; done=true; res(v||null); }; const t=setTimeout(()=>finish(null),timeout); img.onload=()=>{ clearTimeout(t); finish(img); }; img.onerror=()=>{ clearTimeout(t); finish(null); }; img.src=src; }); }
 
   // Bird sprite support
-  const BIRD_SPRITE_URL    = "assets/bird-sprite.png";
+  const BIRD_SPRITE_URL    = "assets/bird-sprite.png"; // 4 frames in a row
   const BIRD_SPRITE_FRAMES = 4;
   const BIRD_SPRITE_FPS    = 10;
   let birdSprite=null, birdFallbackImg=null;
 
   let bgImg=null;
 
-  // Pipe styles (same as before)
+  // Pipe styles
   const PIPE_STYLES_CFG = [
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -234,9 +232,9 @@
   ];
   const Raw={ bottoms:[], tops:[] };
   const Styles=[];
-  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=false; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
+  function makeScaledCanvas(img,w,h){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#3a3a3a"; g.fillRect(0,0,w,h);} return c; }
   function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
-    if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.imageSmoothingEnabled=false; g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
+    if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.imageSmoothingEnabled=true; g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return { cap:ph, body:ph }; }
     const scale = drawW / (img.naturalWidth || img.width);
     const scaledH = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
     const capH    = Math.max(1, Math.round(capPxSrc * scale));
@@ -246,7 +244,7 @@
     cap.width = drawW; cap.height = Math.min(capH, scaledH);
     body.width = drawW; body.height = Math.max(1, scaledH - cap.height);
     const cg = cap.getContext("2d"), bg = body.getContext("2d");
-    cg.imageSmoothingEnabled = bg.imageSmoothingEnabled = false;
+    cg.imageSmoothingEnabled = bg.imageSmoothingEnabled = true;
     if (capFrom === "top") {
       cg.drawImage(full, 0, 0, drawW, cap.height, 0, 0, drawW, cap.height);
       bg.drawImage(full, 0, cap.height, drawW, body.height, 0, 0, drawW, body.height);
@@ -268,16 +266,120 @@
     }
   }
 
-  // Systems (same content as earlier – omitted here for brevity)
-  const SYSTEMS=[ /* ——— keep your SYSTEMS array from the last working version here ——— */ ];
+  // ---------- SYSTEM INFO ----------
+  const SYSTEMS = [
+    { title: "EATNASTAK (DOUBLE FACE)",
+      blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
+offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding
+your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized
+library management.`,
+      img: "assets/pipe1.png", tds: "#",
+      specHeaders: ["Specification","Standard Dimensions"],
+      specs: [
+        ["Width","24, 30, 36\""],
+        ["Depth","7, 8, 9, 10, 11, 12, 13, 14, 15, 16\""],
+        ["Height","30, 31, …, 108\""],
+        ["Shelf Load Capacity","Up to 50 psf"]
+      ]
+    },
+    { title: "SMARTSHELF (FIXED, FULL DEPTH)",
+      blurb: "Montel's patented SmartShelf is the most versatile storage shelving system available today. This innovative 4-post shelving offers complete flexibility, accommodating items of all shapes and sizes. It is also designed for easy assembly and reconfiguration.",
+      img: "assets/pipe2.png", tds: "#",
+      specHeaders: ["Specification","Standard Dimensions"],
+      specs: [
+        ["Width","24, 30, 36, 1M, 42, 48, 54\""],
+        ["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],
+        ["Height","30, 31, …, 120\""],
+        ["Frame Load Capacity","Up to 2,500 lbs per frame"],
+        ["Shelf Load Capacity","Up to 500 lbs per shelf"]
+      ]
+    },
+    { title: "4D Wide Span",
+      blurb: "Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease. Engineered for strength and versatility, its robust beams support direct item placement, while optional drop panels transform the structure into sturdy shelving. For enhanced functionality, 4D frames seamlessly integrate with SmartShelf 4-Post accessories, delivering unmatched adaptability to meet your storage needs.",
+      img: "assets/pipe3.png", tds: "#",
+      specHeaders: ["Specification","Capacity"],
+      specs: [
+        ["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],
+        ["Load per Level","3\" Beam : 1,000lbs per pair of beam (454 kg)"],
+        ["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],
+        ["Height","4' to 8' (1.2 m to 2.4 m)"],
+        ["Depth","Up to 20' (6.1 m)"]
+      ]
+    },
+    { title: "SmartSpace",
+      blurb: "Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects. Designed with efficiency in mind, the SmartSpace system ensures quick and hassle-free installation, helping you save time and reduce expenses. Choose between two tailored options, manual or mechanically assisted, to meet your unique storage requirements with ease and precision.",
+      img: "assets/pipe4.png", tds: "#",
+      specHeaders: ["Specification","Capacity"],
+      specs: [
+        ["Section Load Capacity","2,000 lbs per section (907 kg)"],
+        ["Section Length","24\" to 48\" (0.61m - 1.2m)"],
+        ["Section Depth","Panels: 12\" to 48\" (0.3m - 1.2 m)\nColumns: 18\" to 48\" (0.5m - 1.2m)"],
+        ["Carriage Load Capacity","16,000 lbs per carriage (7270kg)"],
+        ["Carriage Length","Max 24' (7.3 m)"]
+      ]
+    },
+    { title: "SmartGlide",
+      blurb: `Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system that leverages your available space to maximize storage efficiency. It’s an excellent alternative when space limitations prevent you from using one of our larger mobile systems.
 
-  // Obstacles
+APPLICATION: 	Unlike other mobile systems, you do not have to open up an aisle to access your stored material. Just slide the system laterally to reach what you need. This allows you to make full use of your storage space without wasting a square inch.
+
+For high-density storage of relatively small and light items in tight quarters, such as files, boxes, medications, and parts, it's vastly superior to conventional filing and storage systems.`,
+      img: "assets/pipe5.png", tds: "#",
+      specHeaders: null, specs: []
+    },
+    { title: "GREENRAK",
+      blurb: "Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications. Its lightweight, rust-resistant, and simple design allows for easy installation, use, and maintenance.",
+      img: "assets/greenrak.png", tds: "#",
+      specTable: {
+        headers: ["Specification","Section","Mobile"],
+        rows: [
+          ["Load","Max 2,400 lbs/section","Max 18,000 lbs/mobile"],
+          ["Depth","—-------------","36”, 42”, 48”"],
+          ["Length","4’, 8’","Max 50’"]
+        ]
+      }
+    },
+    { title: "Mobilex",
+      blurb: "Montel's Mobilex mechanical-assist mobile storage systems provide your organization with the flexibility to customize high-density storage solutions to meet your unique needs. Its innovative mechanism allows for effortless access and mobilization of your items.",
+      img: "assets/pipe7.png", tds: "#",
+      specHeaders: ["Specification","Capacity"],
+      specs: [
+        ["Load Capacity","1,000 lbs per linear foot (1 488kg/m)"],
+        ["Depth","3' to 45' (0.91m - 13.7m)"],
+        ["Length","15\" to 48\" (0.4m -2.4 m)"]
+      ]
+    },
+    { title: "SAFERAK 32P & 60P",
+      blurb: "Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system. Designed for industrial environments, the SAFERAK® 32P & 60P can handle, respectively, an impressive load capacity of 32,000 lbs and 60,000 lbs per double rack section, optimizing storage efficiency and cutting costs. Embrace the future with smart factory technology, fully equipped for Industry 4.0 to boost your production efficiency and adaptability through seamless digital transformation.",
+      img: "assets/pipe8.png", tds: "#",
+      specTable: {
+        headers: ["Specification","SAFERAK 32P","SAFERAK 60P"],
+        rows: [
+          ["Load per Double-Bay","32,000lbs (14 500 kg)","60,000lbs (27 200 kg)"],
+          ["Load per Carriage","256,000 lbs (116 000 kg)","480,000 lbs (217 600 kg)"],
+          ["Bay Depth","Up to 8' (2.4 m)","Up to 8' (2.4 m)"],
+          ["Bay Width","Up to 12' (3.6 m)","Up to 12' (3.6 m)"],
+          ["Carriage Length","Up to 100’ (30 m)","Up to 120’ (36 m)"],
+          ["Industrial Safeties","YES","YES"],
+          ["PLC","YES","YES"],
+          ["Touchscreen UI","YES","YES"],
+          ["Signal Strobe and Buzzers","YES","YES"],
+          ["VPN eWonConnectivity","YES","YES"],
+          ["Rear Controls","Optional","Optional"],
+          ["In-Aisle E-Stops","Optional","Optional"],
+          ["Illuminated E-Stops","Optional","Optional"]
+        ]
+      }
+    }
+  ];
+
+  /* ----------------- OBSTACLES ----------------- */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
   function buildVerticalSprite(sty, top, gap, w){
     const c=document.createElement('canvas'); c.width=w; c.height=H;
-    const g=c.getContext('2d'); g.imageSmoothingEnabled=false;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
     if(top>0){
       const cap=sty.top.cap, body=sty.top.body;
       const capH=Math.min(cap.height,top), bodyH=top-capH;
@@ -301,10 +403,12 @@
     }
     return c;
   }
+
   function buildHorizontalSprite(sty){
-    const img=sty.botImg, drawW=sty.drawW;
+    const img=sty.botImg;
+    const drawW=sty.drawW;
     const c=document.createElement('canvas'); c.width=Math.max(1, drawW*6); c.height=drawW;
-    const g=c.getContext('2d'); g.imageSmoothingEnabled=false;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
     if(img){
       const scale=drawW/(img.naturalWidth||img.width);
       const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
@@ -316,6 +420,7 @@
     }
     return c;
   }
+
   function spawnVerticalAt(xPos){
     if(!Styles.length) return;
     const margin=Math.round(H*0.10), maxSection=Math.round(H*0.45);
@@ -329,6 +434,7 @@
     obstacles.push({type:'V',x:xPos,top,gap,w,styleIndex,scored:false,sprite});
   }
   const spawnVertical=()=>spawnVerticalAt(W);
+
   function spawnHorizontalAt(xStart){
     if(!Styles.length) return;
     const styleIndex=Math.floor(Math.random()*Styles.length), sty=Styles[styleIndex];
@@ -346,6 +452,7 @@
       lastRight = last.x + last.w;
     }
   }
+
   function stepObstacles(dt){
     for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
     for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x+obstacles[i].w<=0) obstacles.splice(i,1);
@@ -367,7 +474,9 @@
     if(phase==='H_CHALLENGE'){ if(obstacles.findIndex(o=>o.type==='H')===-1){ phase='POST_BUFFER'; bufferTime = BUFFER_PIXELS / SCROLL_PPS; } return; }
     if(phase==='POST_BUFFER'){ bufferTime -= dt; if(bufferTime<=0){ phase='VERTICALS'; verticalsEnabled=true; } return; }
   }
+
   function scoreUp(){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
+
   function collideAndScore(leftover){
     const BIRD_INSET = 8, GAP_FORGIVE = 12;
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
@@ -389,9 +498,10 @@
     }
     return false;
   }
+
   function drawObstaclesInterpolated(leftover){
     for(const o of obstacles){
-      const xR=o.x - SCROLL_PPS*leftover;
+      const xR=o.x - SCROLL_PPS*leftover; // fractional position for buttery motion
       if(o.sprite) ctx.drawImage(o.sprite, xR, (o.type==='H'?o.y:0), o.w, (o.type==='H'?o.h:H));
     }
   }
@@ -399,7 +509,7 @@
   // Background
   function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#d9f4ff"; ctx.fillRect(0,0,W,H); } }
 
-  // Bird
+  // Bird (sprite sheet with fallback)
   const bird={
     x:Math.round(W*0.167), y:Math.round(H*0.5),
     w:Math.round(H*0.069), h:Math.round(H*0.069),
@@ -427,37 +537,12 @@
     reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; }
   };
 
-  // Semi-fixed timestep + dynamic render scale
+  // Semi-fixed timestep + interpolation
   let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
-  let INTERNAL_SCALE = 1;               // dynamic internal resolution scale
-  let transformSet = false;
-  const MAX_FRAME_DT=0.12, samples=[], targetRates=[60,90,100,120,144,165,180,240];
-  function calibrate(dt){
-    if(samples.length<30){ samples.push(dt); return; }
-    const avg=samples.reduce((a,b)=>a+b,0)/samples.length;
-    const estHz=Math.round(1/avg);
-    let nearest=targetRates[0], diff=1e9;
-    for(const r of targetRates){ const d=Math.abs(estHz-r); if(d<diff){ diff=d; nearest=r; } }
-    physicsHz = 120;            // cap physics at 120Hz for stability
-    STEP = 1/physicsHz;
-    // Dynamic internal resolution: drop to 75% if ~60Hz
-    INTERNAL_SCALE = (nearest <= 60) ? 0.75 : 1.0;
-    // Apply internal canvas size + transform once
-    const targetW = Math.max(1, Math.round(W * INTERNAL_SCALE));
-    const targetH = Math.max(1, Math.round(H * INTERNAL_SCALE));
-    if (canvas.width !== targetW || canvas.height !== targetH) {
-      canvas.width = targetW; canvas.height = targetH;
-      ctx.imageSmoothingEnabled = false;
-      ctx.setTransform(INTERNAL_SCALE, 0, 0, INTERNAL_SCALE, 0, 0); // map logical W×H to internal pixels
-    }
-    transformSet = true;
-    samples.length=30; // keep rolling average steady
-  }
+  const MAX_FRAME_DT=0.12;
 
   function loop(ts){
-    let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0;
-    if(!transformSet) calibrate(frameDt);
-    lastTs=ts;
+    let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; lastTs=ts;
 
     accumulator += frameDt;
     while(accumulator>=STEP){
@@ -465,6 +550,7 @@
         stepObstacles(STEP);
         bird.step(STEP);
 
+        // Top/bottom grace
         const INSET = 8;
         bird.yRender = bird.y;
         const topAllowancePx = bird.h * TOP_OVERLAP_FRAC;
@@ -476,7 +562,6 @@
     }
     const leftover = over?0:accumulator;
 
-    // Clear + draw (logical coords; transform handles scale)
     ctx.clearRect(0,0,W,H);
     drawBackground();
     bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
@@ -485,7 +570,7 @@
 
     if(started && !over) collideAndScore(leftover);
 
-    // version
+    // version tag (small grey)
     ctx.fillStyle='rgba(120,120,120,0.95)';
     ctx.font='700 8px Montserrat,system-ui';
     ctx.fillText('v'+VERSION, 14, H-14);
@@ -559,7 +644,7 @@
     if(e.code==='Space'||e.key===' '){ await handleTap(e); }
   }, {passive:false});
 
-  // Boot (draw immediately with fallbacks)
+  // Boot
   requestAnimationFrame(loop);
 
   (async () => {
