@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — Local Assets (v1.73)</title>
+<title>ROCKET MO — Local Assets (v1.74)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -125,7 +125,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.73';
+  const VERSION = '1.74';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ---------- World ---------- */
@@ -158,7 +158,14 @@
   addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
   // Fallback background
-  let bgCache=null; function buildBgCache(){ const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d'); const g1=g.createLinearGradient(0,0,0,H); g1.addColorStop(0,'#0f1116'); g1.addColorStop(1,'#1a1e26'); g.fillStyle=g1; g.fillRect(0,0,W,H); const r1=g.createRadialGradient(W*0.16,H*0.25,50, W*0.16,H*0.25,420); r1.addColorStop(0,'rgba(255,210,90,0.18)'); r1.addColorStop(1,'rgba(255,210,90,0)'); g.fillStyle=r1; g.fillRect(0,0,W,H); const r2=g.createRadialGradient(W*0.85,H*0.35,50, W*0.85,H*0.35,520); r2.addColorStop(0,'rgba(255,120,60,0.14)'); r2.addColorStop(1,'rgba(255,120,60,0)'); g.fillStyle=r2; g.fillRect(0,0,W,H); return c; }
+  let bgCache=null;
+  function buildBgCache(){
+    const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d');
+    const g1=g.createLinearGradient(0,0,0,H); g1.addColorStop(0,'#0f1116'); g1.addColorStop(1,'#1a1e26'); g.fillStyle=g1; g.fillRect(0,0,W,H);
+    const r1=g.createRadialGradient(W*0.16,H*0.25,50, W*0.16,H*0.25,420); r1.addColorStop(0,'rgba(255,210,90,0.18)'); r1.addColorStop(1,'rgba(255,210,90,0)'); g.fillStyle=r1; g.fillRect(0,0,W,H);
+    const r2=g.createRadialGradient(W*0.85,H*0.35,50, W*0.85,H*0.35,520); r2.addColorStop(0,'rgba(255,120,60,0.14)'); r2.addColorStop(1,'rgba(255,120,60,0)'); g.fillStyle=r2; g.fillRect(0,0,W,H);
+    return c;
+  }
   function drawBackground(){ if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; } if(!bgCache) bgCache=buildBgCache(); ctx.drawImage(bgCache,0,0); }
 
   /* ---------- UI refs ---------- */
@@ -282,7 +289,7 @@
   // Build a horizontal using the FULL bottom pipe image, oriented left
   function makeHorizontalSprite(sty, len, thick){
     const src = sty.botImg;
-    const c = document.createElement('canvas'); // store final orientation (len × thick)
+    const c = document.createElement('canvas'); // final orientation (len × thick)
     c.width = len; c.height = thick;
     const g = c.getContext('2d'); g.imageSmoothingEnabled = true;
 
@@ -353,7 +360,7 @@
   }
 
   /* ---------- Bird & FX ---------- */
-  let birdSprite=null, birdFallbackImg=null, bgImg=null;
+  let birdSprite=null, birdFallbackImg=null, bgImg=null; // DECLARED ONCE
   const BIRD_INSET=8, GAP_FORGIVE=12;
 
   const bird={ x:Math.round(W*0.167), y:Math.round(H*0.5), w:Math.round(H*0.069), h:Math.round(H*0.069), v:0, yRender:0, animTime:0, angle:0,
@@ -525,8 +532,8 @@
   }
 
   /* ---------- Input ---------- */
-  startBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); if(state==='title') startGame(); }, {passive:false});
-  fsStartBtn.addEventListener('click', async (e)=>{
+  document.getElementById('startBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); if(state==='title') startGame(); }, {passive:false});
+  document.getElementById('fsStartBtn').addEventListener('click', async (e)=>{
     e.preventDefault(); e.stopPropagation();
     try{ const el=document.documentElement; if(!document.fullscreenElement){ await (el.requestFullscreen?.()||el.webkitRequestFullscreen?.()||el.msRequestFullscreen?.()); } }catch(_){}
     if(state==='title') startGame();
@@ -556,7 +563,6 @@
   function stepObstacles(dt){
     if(state!=='playing') return;
 
-    // consume scroll distance
     nextSpawnPx -= SCROLL_PPS*dt;
 
     while(nextSpawnPx <= 0){
@@ -657,7 +663,6 @@
   }
 
   /* ---------- Loop ---------- */
-  let bgImg=null, birdFallbackImg=null, birdSprite=null;
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; lastTs=ts;
 
