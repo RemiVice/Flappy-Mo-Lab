@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — Local Assets (v1.60)</title>
+<title>ROCKET MO — Local Assets (v1.61)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -125,7 +125,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.60';
+  const VERSION = '1.61';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   const W = 1920, H = 1080;
@@ -139,7 +139,7 @@
   const CHALLENGE_BARS = 3;
   const HORIZ_SPACING_X = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y  = Math.round(H * 0.18);
-  const BUFFER_PIXELS   = Math.round(W * 0.06);   // your chosen spacing
+  const BUFFER_PIXELS   = Math.round(W * 0.06);   // keep your chosen spacing
   const HORIZ_LEAD_PIXELS = Math.round(W * 0.08);
 
   const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
@@ -180,7 +180,7 @@
   const playFlap=()=>woosh(), playHit=()=>crash();
 
   function loadImageWithTimeout(src,timeout=6000){ return new Promise((res)=>{ if(!src){ res(null); return; } const img=new Image(); img.referrerPolicy='no-referrer'; let done=false; const finish=v=>{ if(done)return; done=true; res(v||null); }; const t=setTimeout(()=>finish(null),timeout); img.onload=()=>{ clearTimeout(t); finish(img); }; img.onerror=()=>{ clearTimeout(t); finish(null); }; img.src=src; }); }
-  const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=10;  /* declared ONCE */
+  const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=10;
 
   const PIPE_STYLES_CFG=[
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
@@ -325,8 +325,9 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   }
 
+  /* ✨ FIX: stop all movement & spawning when over === true */
   function stepObstacles(dt){
-    if(!started) return;
+    if(!started || over) return;  // <— freeze immediately at Game Over
     for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
     for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x + obstacles[i].w <= 0) obstacles.splice(i,1);
 
@@ -374,7 +375,7 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   function drawObstaclesInterpolated(leftover){
     for(const o of obstacles){
-      const xR= o.x - (started ? SCROLL_PPS*leftover : 0);
+      const xR= o.x - (started && !over ? SCROLL_PPS*leftover : 0); // no interp when over
       if(o.sprite) ctx.drawImage(o.sprite, xR, (o.type==='H'?o.y:0), o.w, (o.type==='H'?o.h:H));
     }
   }
@@ -570,7 +571,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
   }
 
-  /* --- START / INPUT: robust, splash only --- */
   let armed=false; setTimeout(()=>armed=true, 300);
 
   async function startGame(){
@@ -603,13 +603,13 @@ For high-density storage of relatively small and light items in tight quarters, 
     startGame();
   }, {passive:false});
 
-  // Tap anywhere on the splash to start (not when clicking buttons)
+  // Tap anywhere on the splash to start
   splash.addEventListener('pointerdown', (e)=>{
     if(e.target.closest('#startBtn,#fsStartBtn')) return;
     e.preventDefault(); startGame();
   }, {passive:false});
 
-  // Space/Enter while splash visible (global)
+  // Space/Enter while splash visible
   document.addEventListener('keydown', (e)=>{
     const splashVisible = !splash.classList.contains('hidden');
     if(!splashVisible) return;
