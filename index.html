@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — Local Assets (v1.68)</title>
+<title>ROCKET MO — Local Assets (v1.69)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -40,7 +40,7 @@
       rgba(20,24,28,.78);
     color:#fff; border-radius:18px; border:1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px);
     box-shadow:0 22px 60px rgba(0,0,0,.55); padding:26px 22px 18px; text-align:center;
-    margin-top:38px;
+    margin-top:52px; /* a little more space so the bird doesn't touch */
   }
   .logo{ display:inline-grid; place-items:center; margin-bottom:6px; }
   .logo .word{
@@ -125,7 +125,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.68';
+  const VERSION = '1.69';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ---------- World ---------- */
@@ -170,7 +170,10 @@
   fsBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); const el=document.documentElement; try{ if(!inFullscreen()){ await (el.requestFullscreen?.()||el.webkitRequestFullscreen?.()||el.msRequestFullscreen?.()); } else { await (document.exitFullscreen?.()||document.webkitExitFullscreen?.()||document.msExitFullscreen?.()); } }catch(_){ } updateFsBtn(); }, {passive:false});
   ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
 
-  let started=false, over=false, restartLocked=false;
+  /* ---------- State ---------- */
+  let state = 'title'; // 'title' | 'playing' | 'gameover'
+  let restartLocked=false;
+
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
 
   /* ---------- Audio ---------- */
@@ -304,8 +307,7 @@
       } else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h); }
       ctx.restore();
     },
-    step(dt){ if(!started||over) return; this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
-    flap(){ if(!started||over) return; this.v=LIFT_V0; },
+    flap(){ if(state!=='playing') return; this.v=LIFT_V0; },
     reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; this.angle=0; }
   };
 
@@ -313,7 +315,7 @@
   const flameCtx=flameCanvas.getContext('2d',{alpha:true}); flameCtx.imageSmoothingEnabled=false;
 
   function drawPixelFlame(){
-    if(over) return; // hide on Game Over
+    if(state==='gameover') return; // hide on Game Over
     const ang=bird.computeAngle(), fwdX=Math.cos(ang), fwdY=Math.sin(ang);
     const centerX=bird.x+bird.w/2, centerY=bird.yRender;
     const nozzleX=centerX - fwdX*(bird.w*PIXEL_FLAME.offsetFrac);
@@ -344,8 +346,6 @@
     const drawW=bird.w*(PIXEL_FLAME.lenFrac*(1+(Math.random()*2-1)*PIXEL_FLAME.flicker));
     const drawH=bird.h*PIXEL_FLAME.heightFrac;
 
-    // *** FIXED: draw to the LEFT of the nozzle with a valid source rect ***
-    // src: (0,0,w,h), dst: (-drawW, 0, drawW, drawH)
     ctx.translate(0, -drawH/2);
     ctx.drawImage(flameCanvas, 0, 0, flameCanvas.width, flameCanvas.height, -drawW, 0, drawW, drawH);
 
@@ -358,7 +358,7 @@
     if (SMOKE.length > SMOKE_MAX) return;
     while (smokeTimer >= 1) {
       smokeTimer--;
-      if (!over) {
+      if (state!=='gameover') {
         const ang = bird.computeAngle(), fwdX=Math.cos(ang), fwdY=Math.sin(ang);
         const nozzleX = bird.x + bird.w/2 - fwdX * (bird.w * PIXEL_FLAME.offsetFrac);
         const nozzleY = bird.yRender       - fwdY * (bird.w * PIXEL_FLAME.offsetFrac);
@@ -378,25 +378,35 @@
 
   /* ---------- Flow ---------- */
   let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
+
+  function showTitle(){
+    state='title';
+    restartLocked=false;
+    splash.classList.remove('hidden');
+    gameOverCard.classList.add('hidden');
+    score=0; scoreEl.textContent='0';
+  }
+
   function startGame(){
-    if(started) return;
+    if(state==='playing') return;
     unlockAudio().catch(()=>{});
-    started=true; over=false; restartLocked=false;
+    state='playing';
+    restartLocked=false;
+
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
 
-    // first vertical after some lead distance
     nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
 
     splash.classList.add('hidden');
     gameOverCard.classList.add('hidden');
-
-    bird.flap();
+    bird.v = 0; // start calm; first tap/space will flap
   }
 
   function endGame(hitStyleIdx){
-    if(over) return; over=true; bird.v=0; crash();
+    if(state==='gameover') return;
+    state='gameover'; bird.v=0; crash();
     finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
 
     const box   = document.getElementById('sysInfoBox');
@@ -454,42 +464,42 @@
     restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 900);
   }
 
-  /* ---------- Input ---------- */
-  startBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); startGame(); }, {passive:false});
+  /* ---------- Centralized Input (no more conflicting handlers) ---------- */
+  startBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); if(state==='title') startGame(); }, {passive:false});
   fsStartBtn.addEventListener('click', async (e)=>{
     e.preventDefault(); e.stopPropagation();
     try{ const el=document.documentElement; if(!document.fullscreenElement){ await (el.requestFullscreen?.()||el.webkitRequestFullscreen?.()||el.msRequestFullscreen?.()); } }catch(_){}
-    startGame();
+    if(state==='title') startGame();
   }, {passive:false});
-  splash.addEventListener('pointerdown', (e)=>{ if(e.target.closest('#startBtn,#fsStartBtn')) return; e.preventDefault(); startGame(); }, {passive:false});
 
-  document.addEventListener('pointerdown', (e)=>{
-    if(e.target.closest('#muteBtn, #fsBtn, #gameOverCard')) return;
+  let lastTap=0;
+  function onPointerDown(e){
+    const now=performance.now(); if(now-lastTap<140){ return; } lastTap=now;
+
+    // Ignore clicks on UI controls; their own handlers will run
+    if(e.target.closest('#muteBtn, #fsBtn, #startBtn, #fsStartBtn, #gameOverCard')) return;
+
     e.preventDefault(); e.stopPropagation();
-    if(!started){ startGame(); return; }
-    if(!over){ bird.flap(); } else if(!restartLocked){ startGame(); }
-  }, {passive:false, capture:true});
 
-  document.getElementById('overlay').addEventListener('pointerdown', (e)=>{
-    if(!over) return;
-    if(e.target.closest('#gameOverCard')) return;
-    e.preventDefault();
-    if(!restartLocked) startGame();
-  }, {passive:false});
+    if(state==='title'){ startGame(); return; }
+    if(state==='playing'){ bird.flap(); return; }
+    if(state==='gameover'){ if(!restartLocked) startGame(); return; }
+  }
+  document.addEventListener('pointerdown', onPointerDown, {passive:false, capture:true});
 
   document.addEventListener('keydown', (e)=>{
     if(e.code==='Space' || e.key===' ' || e.key==='Enter'){
       e.preventDefault();
-      if(!started){ startGame(); return; }
-      if(over){ if(!restartLocked) startGame(); return; }
-      bird.flap();
+      if(state==='title'){ startGame(); return; }
+      if(state==='gameover'){ if(!restartLocked) startGame(); return; }
+      if(state==='playing'){ bird.flap(); }
     }
   });
 
   /* ---------- Game core ---------- */
-  let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
+  let nextSpawnPxInit = FIRST_VERTICAL_LEAD_PIXELS;
   function stepObstacles(dt){
-    if(!started || over) return;
+    if(state!=='playing') return;
     nextSpawnPx -= SCROLL_PPS*dt;
     while(nextSpawnPx<=0){ spawnVerticalAt(W); nextSpawnPx += VERTICAL_X_GAP; }
 
@@ -519,7 +529,7 @@
 
   function drawObstaclesInterpolated(leftover){
     for(const o of obstacles){
-      const xR= o.x - (started && !over ? SCROLL_PPS*leftover : 0);
+      const xR= (state==='playing') ? (o.x - SCROLL_PPS*leftover) : o.x;
       if(o.sprite) ctx.drawImage(o.sprite, xR, 0, o.w, H);
     }
   }
@@ -531,7 +541,7 @@
     accumulator+=frameDt;
     while(accumulator>=STEP){
       stepObstacles(STEP);
-      if(started && !over){
+      if(state==='playing'){
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
         const topWrap   = -bird.h * TOP_OVERLAP_FRAC;
         const bottomWrap=  H + bird.h * BOTTOM_OVERLAP_FRAC;
@@ -540,12 +550,13 @@
       }
       accumulator-=STEP;
     }
-    const leftover=over?0:accumulator;
+    const leftover=(state==='playing')?accumulator:0;
 
     ctx.clearRect(0,0,W,H);
     drawBackground();
 
-    bird.yRender = bird.y + (started && !over ? bird.v*leftover + 0.5*G*leftover*leftover : 0);
+    // Bird render position (predictive only while playing)
+    bird.yRender = bird.y + (state==='playing' ? bird.v*leftover + 0.5*G*leftover*leftover : 0);
 
     updateSmoke(frameDt);
     drawSmoke(frameDt);
@@ -553,9 +564,10 @@
     drawPixelFlame();
     bird.draw(frameDt);
 
-    if(started && !over) collideAndScore(leftover);
+    if(state==='playing') collideAndScore(leftover);
 
-    if(started || over){ ctx.fillStyle='rgba(120,120,120,0.95)'; ctx.font='700 8px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
+    // version (bottom only)
+    if(state!=='title'){ ctx.fillStyle='rgba(120,120,120,0.95)'; ctx.font='700 8px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
     requestAnimationFrame(loop);
   }
@@ -580,6 +592,10 @@
       Raw.bottoms=bottoms; Raw.tops=tops; rebuildStyles();
     }catch(_){ rebuildStyles(); }
   })();
+
+  // Initialize title
+  let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
+  showTitle();
 
 })();
 </script>
