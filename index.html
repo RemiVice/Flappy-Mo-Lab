@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.49d-pixelflame)</title>
+<title>Flappy Mo — Local Assets (v1.50-wraptest)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -36,7 +36,7 @@
   .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
   .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
 
-  /* Rotate hint is non-blocking now */
+  /* Non-blocking rotate hint */
   .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:9; pointer-events:none; }
   .rot-overlay.show{ display:flex }
   .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
@@ -106,48 +106,49 @@
 
 <script>
 (() => {
-  const VERSION = '1.49d-pixelflame';
+  const VERSION = '1.50-wraptest';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-  // WORLD & PHYSICS
+  /* ===== WORLD & PHYSICS ===== */
   const W = 1920, H = 1080;
   const SPEED_MULT = isMobile ? 1.40 : 1.50;
   const G=4800*SPEED_MULT, LIFT_V0=-1350*SPEED_MULT, MAX_FALL=2200*SPEED_MULT, SCROLL_PPS=480*SPEED_MULT;
 
-  // PIPES & SPACING
+  /* ===== PIPES & SPACING ===== */
   const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
   const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);
   const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;
 
-  // HORIZONTAL CHALLENGE
+  /* ===== HORIZONTAL CHALLENGE ===== */
   const CHALLENGE_BARS=3;
   const HORIZ_SPACING_X=Math.round(W*0.25);
   const HORIZ_MARGIN_Y=Math.round(H*0.18);
-  const BUFFER_PIXELS=Math.round(W*0.06); // your 6%
+  const BUFFER_PIXELS=Math.round(W*0.06);  // your 6% buffer
   const HORIZ_LEAD_PIXELS=Math.round(W*0.08);
 
-  // TOP/BOTTOM GRACE
+  /* ===== TOP/BOTTOM WRAP GRACE =====
+     (we used these before to end the game; now we use them as wrap margins) */
   const TOP_OVERLAP_FRAC=0.30;
   const BOTTOM_OVERLAP_FRAC=0.75;
 
-  // FLAME & SMOKE
+  /* ===== FLAME & SMOKE ===== */
   const PIXEL_FLAME={ gridW:64, gridH:32, lenFrac:1.0, heightFrac:0.65, offsetFrac:0.50, colHot:'#fff68a', colMid:'#ff9c3a', colCool:'#ff3b22', jitter:2, flicker:0.08 };
   const SMOKE=[], SMOKE_RATE=40; let smokeTimer=0;
 
-  // FLOW
+  /* ===== FLOW STATE ===== */
   let phase='VERTICALS', bufferTime=0, challengeQueued=false, verticalsPassed=0, nextSpawnPx=FIRST_VERTICAL_LEAD_PIXELS, verticalsEnabled=true;
 
-  // CANVAS & FIT
+  /* ===== CANVAS & FIT ===== */
   const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d',{alpha:false}); ctx.imageSmoothingEnabled=true;
   function fitCSS(){ const vw=innerWidth; const vh=Math.round(window.visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
   addEventListener('resize', fitCSS, {passive:true}); window.visualViewport&&visualViewport.addEventListener('resize', fitCSS, {passive:true}); fitCSS();
 
-  // ROTATE HINT (non-blocking)
+  /* ===== ROTATE HINT ===== */
   const rotBlock=document.getElementById('rotBlock');
   function checkOrientation(){ const landscapeOK = innerWidth >= innerHeight; rotBlock.classList.toggle('show', isMobile && !landscapeOK); }
   addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
-  // HUD
+  /* ===== HUD ===== */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
   const startCard=document.getElementById('startCard'), gameOverCard=document.getElementById('gameOverCard'), finalScoreP=document.getElementById('finalScoreP');
   const fsBtn=document.getElementById('fsBtn');
@@ -156,11 +157,11 @@
   fsBtn.addEventListener('click', async (e)=>{ e.stopPropagation(); const el=document.documentElement; try{ if(!inFullscreen()){ await (el.requestFullscreen?.()||el.webkitRequestFullscreen?.()||el.msRequestFullscreen?.()); } else { await (document.exitFullscreen?.()||document.webkitExitFullscreen?.()||document.msExitFullscreen?.()); } }catch(_){} updateFsBtn(); }, {passive:false});
   ["fullscreenchange","webkitfullscreenchange","msfullscreenchange"].forEach(ev=>document.addEventListener(ev, updateFsBtn, {passive:true}));
 
-  // SCORES
+  /* ===== SCORES ===== */
   let started=false, over=false, restartLocked=false;
   let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
 
-  // AUDIO (flap + crash only)
+  /* ===== AUDIO (flap + crash only) ===== */
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
   function createAudio(){ if(audioReady) return; const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; audioCtx=new AC({latencyHint:"interactive"}); masterGain=audioCtx.createGain(); masterGain.gain.value=muted?0:0.85; masterGain.connect(audioCtx.destination); audioReady=true; }
   async function unlockAudio(){ try{ createAudio(); if(audioCtx && audioCtx.state!=='running'){ await audioCtx.resume(); } }catch(_){ } }
@@ -171,11 +172,11 @@
   function crash(d=1.1){ if(!audioReady||muted) return; const n=Math.max(1,audioCtx.sampleRate*d); const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate); const data=buf.getChannelData(0); let b0=0,b1=0,b2=0; for(let i=0;i<n;i++){ const w=Math.random()*2-1; b0=0.997*b0+w*0.03; b1=0.985*b1+w*0.05; b2=0.95*b2+w*0.07; data[i]=(b0+b1+b2)*0.65; } const src=audioCtx.createBufferSource(); src.buffer=buf; const lp=audioCtx.createBiquadFilter(); lp.type="lowpass"; lp.frequency.value=700; const g=envGain(d,0.02,0.45); if(!g)return; src.connect(lp); lp.connect(g); g.connect(masterGain); src.start(); src.stop(audioCtx.currentTime+d+0.05); }
   const playFlap=()=>woosh(), playHit=()=>crash();
 
-  // ASSETS
+  /* ===== ASSETS ===== */
   function loadImageWithTimeout(src,timeout=6000){ return new Promise((res)=>{ if(!src){ res(null); return; } const img=new Image(); img.referrerPolicy='no-referrer'; let done=false; const finish=v=>{ if(done)return; done=true; res(v||null); }; const t=setTimeout(()=>finish(null),timeout); img.onload=()=>{ clearTimeout(t); finish(img); }; img.onerror=()=>{ clearTimeout(t); finish(null); }; img.src=src; }); }
   const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=10; let birdSprite=null, birdFallbackImg=null, bgImg=null;
 
-  // PIPE STYLES
+  /* ===== PIPE STYLES ===== */
   const PIPE_STYLES_CFG=[
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -205,7 +206,7 @@
   }
   function rebuildStyles(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({name:cfg.name,bottom,top:topset,drawW,botImg:bot}); } }
 
-  // ---- FULL SYSTEM INFO (for Game Over card) ----
+  /* ===== SYSTEM INFO (Game Over) ===== */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -312,7 +313,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   ];
 
-  // OBSTACLES
+  /* ===== OBSTACLES ===== */
   const obstacles=[]; const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
   function makeVerticalSprite(sty, top, gap, w){
@@ -441,10 +442,10 @@ For high-density storage of relatively small and light items in tight quarters, 
     }
   }
 
-  // BG
+  /* ===== BACKGROUND ===== */
   function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#ffe77a"; ctx.fillRect(0,0,W,H); } }
 
-  // FLAME (pixel-art style)
+  /* ===== FLAME (pixel-art) ===== */
   const flameCanvas=document.createElement('canvas'); flameCanvas.width=PIXEL_FLAME.gridW; flameCanvas.height=PIXEL_FLAME.gridH; const flameCtx=flameCanvas.getContext('2d',{alpha:true}); flameCtx.imageSmoothingEnabled=false;
   function drawPixelFlame(){
     if(!started || over) return;
@@ -484,7 +485,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     ctx.imageSmoothingEnabled=true;
   }
 
-  // SMOKE
+  /* ===== SMOKE ===== */
   function updateSmoke(frameDt){
     smokeTimer += frameDt * SMOKE_RATE;
     while (smokeTimer >= 1) {
@@ -511,7 +512,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     ctx.imageSmoothingEnabled=true; ctx.restore();
   }
 
-  // BIRD
+  /* ===== BIRD ===== */
   const bird={ x:Math.round(W*0.167), y:Math.round(H*0.5), w:Math.round(H*0.069), h:Math.round(H*0.069), v:0, yRender:0, animTime:0, angle:0,
     computeAngle(){ this.angle=Math.max(-0.45, Math.min(0.9, (this.v/600)*0.5)); return this.angle; },
     draw(dt){ const ang=this.computeAngle(); this.animTime+=dt; ctx.save(); ctx.translate(this.x+this.w/2, this.yRender); ctx.rotate(ang);
@@ -524,7 +525,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; this.angle=0; }
   };
 
-  // FIXED-STEP + INTERP
+  /* ===== FIXED-STEP + INTERP (with vertical WRAP) ===== */
   let physicsHz=120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now(); const MAX_FRAME_DT=0.12;
 
   function loop(ts){
@@ -535,10 +536,19 @@ For high-density storage of relatively small and light items in tight quarters, 
       if(started && !over){
         stepObstacles(STEP);
         bird.step(STEP);
-        const INSET=8;
-        bird.yRender=bird.y;
-        if(bird.yRender-(bird.h/2-INSET)<=-(bird.h*TOP_OVERLAP_FRAC)) endGame(null);
-        if(bird.yRender+(bird.h/2-INSET)>=H+(bird.h*BOTTOM_OVERLAP_FRAC)) endGame(null);
+
+        // ---- VERTICAL WRAP INSTEAD OF GAME OVER ----
+        const topWrap   = -bird.h * TOP_OVERLAP_FRAC;
+        const bottomWrap=  H + bird.h * BOTTOM_OVERLAP_FRAC;
+        if (bird.y < topWrap){
+          // how far past the top did we go?
+          const overshoot = topWrap - bird.y;
+          bird.y = bottomWrap - overshoot; // appear near bottom with same velocity/angle
+        } else if (bird.y > bottomWrap){
+          const overshoot = bird.y - bottomWrap;
+          bird.y = topWrap + overshoot;    // appear near top with same velocity/angle
+        }
+        // --------------------------------------------
       }
       accumulator-=STEP;
     }
@@ -557,7 +567,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     requestAnimationFrame(loop);
   }
 
-  // GAME OVER PANEL
+  /* ===== GAME OVER PANEL ===== */
   function endGame(hitStyleIdx){
     if(over) return; over=true; bird.v=0; playHit();
     finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
@@ -602,7 +612,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     restartLocked=true; setTimeout(()=>{ restartLocked=false; },1000);
   }
 
-  // START/INPUT
+  /* ===== START/INPUT ===== */
   function startGame(){
     started=true; over=false; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore;
@@ -616,13 +626,12 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   async function handleTap(e){
     e?.preventDefault?.(); e?.stopPropagation?.();
-    await unlockAudio(); // never block start on Android
+    await unlockAudio();
     if(!started){ startGame(); bird.flap(); return; }
     if(!over){ bird.flap(); return; }
     if(!restartLocked) startGame();
   }
 
-  // Bindings (liberal)
   startCard.addEventListener('click', handleTap, {passive:false});
   startCard.addEventListener('touchstart', handleTap, {passive:false});
   startCard.addEventListener('pointerdown', handleTap, {passive:false});
@@ -631,7 +640,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   document.addEventListener('touchstart', (e)=>{ if(e.target.closest('#gameOverCard')) return; if(e.target.closest('#muteBtn, #fsBtn')) return; handleTap(e); }, {passive:false, capture:true});
   document.addEventListener('keydown', async (e)=>{ if(e.code==='Space'||e.key===' '||e.key==='Enter'){ await handleTap(e); } }, {passive:false});
 
-  // BOOT
+  /* ===== BOOT ===== */
   requestAnimationFrame(loop);
   (async () => {
     try{
