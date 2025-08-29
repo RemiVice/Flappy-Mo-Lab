@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.75</title>
+<title>ROCKET MO — v1.76</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -100,7 +100,7 @@
 
 <script>
 (() => {
-  const VERSION='1.75';
+  const VERSION='1.76';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ---------- Canvas ---------- */
@@ -145,7 +145,7 @@
   // Gaps/pipe sizes
   const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
 
-  // Wrapping leniency (you liked this earlier)
+  // Wrapping leniency
   const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
 
   // Bird collision forgiveness
@@ -341,9 +341,10 @@
 
   function cleanupObstacles(){ for(let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; if((o.type==='V' && o.x+o.w<=0) || (o.type==='H' && o.x+o.len<=0)) obstacles.splice(i,1); } }
 
-  /* ---------- Collisions & scoring ---------- */
+  /* ---------- Scoring ---------- */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
-  let score=0, lastScore=0, best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
+  let score=0, lastScore=0;
+  let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
 
   function collideAndScore(leftover){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
@@ -368,45 +369,79 @@
     return false;
   }
 
-  /* ---------- UI / flow ---------- */
+  /* ---------- UI / flow (robust start) ---------- */
   const splash=document.getElementById('splash');
-  const gameOverCard=document.getElementById('gameOverCard'), finalScoreP=document.getElementById('finalScoreP');
+  const gameOverCard=document.getElementById('gameOverCard');
+  const finalScoreP=document.getElementById('finalScoreP');
 
-  let state='title', restartLocked=false;
+  let state='title';
+  let restartLocked=false;
 
   function showTitle(){
-    state='title'; restartLocked=false; splash.classList.remove('hidden'); gameOverCard.classList.add('hidden');
+    state='title';
+    restartLocked=false;
+    splash.classList.remove('hidden');
+    gameOverCard.classList.add('hidden');
     score=0; scoreEl.textContent='0';
-  }
-  function startGame(){
-    if(state==='playing') return;
-    state='playing'; restartLocked=false;
-    lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
-    obstacles.length=0; bird.reset();
-    patternMode='VERT'; vertSpawned=0; hLeft=0; nextSpawnPx=FIRST_VERTICAL_LEAD;
-    splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
-  }
-  function endGame(hitStyleIdx){
-    if(state==='gameover') return;
-    state='gameover'; bird.v=0;
-    finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
-    fillSystemPanel(hitStyleIdx);
-    gameOverCard.classList.remove('hidden'); gameOverCard.scrollTop=0;
-    restartLocked=true; setTimeout(()=>{ restartLocked=false; }, 900);
+    bird.reset();
   }
 
-  // Start / input
-  let lastTap=0;
-  function onPointerDown(e){
-    const now=performance.now(); if(now-lastTap<140) return; lastTap=now;
-    if(e.target.closest('#gameOverCard')) return;
-    e.preventDefault(); e.stopPropagation();
-    if(state==='title'){ startGame(); return; }
-    if(state==='playing'){ bird.flap(); return; }
-    if(state==='gameover'){ if(!restartLocked) startGame(); return; }
+  function startGame(){
+    if(state==='playing') return;
+    state='playing';
+    restartLocked=false;
+    lastScore=score; lastEl.textContent=lastScore;
+    score=0; scoreEl.textContent='0';
+    obstacles.length=0;
+    patternMode='VERT'; vertSpawned=0; hLeft=0;
+    nextSpawnPx=FIRST_VERTICAL_LEAD;
+    bird.reset();
+    splash.classList.add('hidden');
+    gameOverCard.classList.add('hidden');
   }
-  document.addEventListener('pointerdown', onPointerDown, {passive:false, capture:true});
-  document.addEventListener('keydown', (e)=>{ if(e.code==='Space'||e.key===' '||e.key==='Enter'){ e.preventDefault(); if(state==='title'){ startGame(); } else if(state==='gameover'){ if(!restartLocked) startGame(); } else { bird.flap(); } }});
+
+  function endGame(hitStyleIdx){
+    if(state==='gameover') return;
+    state='gameover';
+    bird.v=0;
+    finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
+    fillSystemPanel(hitStyleIdx);
+    gameOverCard.classList.remove('hidden');
+    gameOverCard.scrollTop=0;
+    restartLocked=true;
+    setTimeout(()=>{ restartLocked=false; }, 900);
+  }
+
+  // Accept taps/clicks anywhere except inside the Game Over card
+  function globalPointerStart(e){
+    if(e.target.closest('#gameOverCard')) return; // allow scroll inside card
+    if(state==='title'){ startGame(); return; }
+    if(state==='playing'){ e.preventDefault(); bird.flap(); return; }
+    if(state==='gameover' && !restartLocked){ startGame(); }
+  }
+  document.addEventListener('pointerdown', globalPointerStart, { passive:false, capture:true });
+
+  // Make the splash itself a guaranteed start target
+  splash.addEventListener('click', ()=>{ if(state!=='playing') startGame(); }, { passive:true });
+  splash.addEventListener('keydown', (e)=>{
+    if(e.key==='Enter' || e.code==='Space' || e.key===' '){ e.preventDefault(); startGame(); }
+  });
+  splash.setAttribute('tabindex','0'); // focusable for keyboard start
+
+  // Keyboard anywhere
+  document.addEventListener('keydown', (e)=>{
+    if(e.repeat) return;
+    if(e.code==='Space' || e.key===' '){
+      if(state==='title') startGame();
+      else if(state==='gameover'){ if(!restartLocked) startGame(); }
+      else bird.flap();
+      e.preventDefault();
+    }
+    if(e.key==='Enter'){
+      if(state==='title') startGame();
+      else if(state==='gameover' && !restartLocked) startGame();
+    }
+  });
 
   /* ---------- Systems panel data ---------- */
   const SYSTEMS=[
@@ -471,13 +506,14 @@
   }
 
   /* ---------- Loop ---------- */
+  function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
+
   function loop(ts){
-    let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; lastTs=ts;
+    let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
     accumulator+=frameDt;
 
     while(accumulator>=STEP){
       if(state==='playing'){
-        // physics
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
 
         // wrap top/bottom
@@ -485,12 +521,10 @@
         if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
         else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
 
-        // spawner & scroll
         stepSpawner(STEP);
         for(const o of obstacles){ o.x-=SCROLL_PPS*STEP; }
         cleanupObstacles();
 
-        // sprite animation
         bird.animTime+=STEP;
       }
       accumulator-=STEP;
@@ -498,15 +532,13 @@
 
     const leftover=(state==='playing')?accumulator:0;
 
-    // render
     ctx.clearRect(0,0,W,H);
     drawBackground();
     bird.yRender = bird.y + (state==='playing' ? bird.v*leftover + 0.5*G*leftover*leftover : 0);
     drawObstaclesInterpolated(leftover);
     bird.draw();
 
-    // Version tag (bottom-left in grey)
-    if(state!=='title'){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
+    if(state!=='title') drawVersionTag();
 
     if(state==='playing') collideAndScore(leftover);
 
@@ -532,9 +564,7 @@
     }catch(_){ rebuildStyles(); }
   })();
 
-  /* ---------- Start in title, input wiring ---------- */
-  const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
-  let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
+  /* ---------- Start on the title screen ---------- */
   showTitle();
 
 })();
