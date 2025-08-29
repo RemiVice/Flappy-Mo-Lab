@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — Local Assets (v1.72)</title>
+<title>ROCKET MO — Local Assets (v1.73)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -125,7 +125,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.72';
+  const VERSION = '1.73';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ---------- World ---------- */
@@ -137,8 +137,7 @@
   const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);
   const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;
 
-  // Wrapping leniency (you asked both top & bottom permissive)
-  const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
+  const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75; // wrapping leniency
 
   /* ---------- Flame & smoke ---------- */
   const PIXEL_FLAME={ gridW:64, gridH:32, lenFrac:1.25, heightFrac:0.72, offsetFrac:0.50, colHot:'#fffcc0', colMid:'#ffae4a', colCool:'#ff4a32', jitter:2, flicker:0.10 };
@@ -280,24 +279,23 @@
     return c;
   }
 
-  // Build a horizontal using the FULL bottom pipe image, visually rotated left
+  // Build a horizontal using the FULL bottom pipe image, oriented left
   function makeHorizontalSprite(sty, len, thick){
     const src = sty.botImg;
-    const c = document.createElement('canvas'); // store rotated already (len × thick)
+    const c = document.createElement('canvas'); // store final orientation (len × thick)
     c.width = len; c.height = thick;
     const g = c.getContext('2d'); g.imageSmoothingEnabled = true;
 
     if (src && (src.naturalWidth||src.width)) {
-      // draw full image into a temp at scale so height==thick, then tile across len
       const sw = src.naturalWidth || src.width;
       const sh = src.naturalHeight || src.height;
-      const scale = thick / sw; // rotate left: width of src becomes thickness
+      const scale = thick / sw;
+
       const temp = document.createElement('canvas');
       temp.width = Math.max(1, Math.round(sh * scale));
       temp.height = Math.max(1, Math.round(sw * scale));
       const tg = temp.getContext('2d'); tg.imageSmoothingEnabled = true;
 
-      // rotate the source -90° into temp so face points left
       tg.save();
       tg.translate(0, temp.height);
       tg.rotate(-Math.PI/2);
@@ -327,15 +325,15 @@
   }
 
   /* ---------- Horizontal pattern constants ---------- */
-  const H_BUFFER = Math.round(W * 0.06);     // you asked 0.06×W
-  const H_BAR_LEN = Math.round(W * 0.55);    // visible bar length
-  const H_BAR_THICK = Math.round(H * 0.09);  // thickness
-  const H_BETWEEN = Math.round(W * 0.25);    // spacing between bars
+  const H_BUFFER = Math.round(W * 0.06);     // 0.06×W (your choice)
+  const H_BAR_LEN = Math.round(W * 0.55);
+  const H_BAR_THICK = Math.round(H * 0.09);
+  const H_BETWEEN = Math.round(W * 0.25);
 
   /* ---------- Spawner state machine ---------- */
   let patternMode = 'VERT';       // 'VERT' | 'HSET'
-  let vertSpawnedInCycle = 0;     // count verticals in current cycle
-  let hBarsLeft = 0;              // bars left in this set
+  let vertSpawnedInCycle = 0;
+  let hBarsLeft = 0;
   let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
   let nextIsBuffer = false;
 
@@ -349,7 +347,6 @@
   function spawnOneHorizontal(){
     const idx = Math.floor(Math.random()*Styles.length); const sty = Styles[idx];
     const sprite = makeHorizontalSprite(sty, H_BAR_LEN, H_BAR_THICK);
-    // place vertically with room (keep away from edges a bit)
     const margin = Math.round(H*0.12);
     const yMid = randInt(margin, H - margin);
     obstacles.push({ type:'H', x:W, y:yMid, len:H_BAR_LEN, thick:H_BAR_THICK, styleIndex:idx, sprite, scored:false });
@@ -393,7 +390,7 @@
     for(let x=0;x<gw;x++){
       const t=x/(gw-1);
       const half=Math.max(1, Math.floor((0.2+0.85*t)*(gh*0.48)));
-      const jag=(Math.random()*2-1)*PIXEL_FLAME.jitter;
+      const jag=(Math.random()*2-1)*2;
       const hh=Math.max(1, Math.min(gh-1, half+jag));
       for(let y=-hh;y<=hh;y++){
         let col; const ay=Math.abs(y);
@@ -404,18 +401,14 @@
         flameCtx.fillStyle=col; flameCtx.fillRect(x, cy+y, 1, 1);
       }
     }
-
     ctx.save();
     ctx.globalCompositeOperation='lighter';
     ctx.translate(nozzleX, nozzleY);
     ctx.rotate(ang);
-
     const drawW=bird.w*(PIXEL_FLAME.lenFrac*(1+(Math.random()*2-1)*PIXEL_FLAME.flicker));
     const drawH=bird.h*PIXEL_FLAME.heightFrac;
-
     ctx.translate(0, -drawH/2);
     ctx.drawImage(flameCanvas, 0, 0, flameCanvas.width, flameCanvas.height, -drawW, 0, drawW, drawH);
-
     ctx.globalCompositeOperation='source-over';
     ctx.restore();
   }
@@ -532,7 +525,6 @@
   }
 
   /* ---------- Input ---------- */
-  const startBtn=document.getElementById('startBtn'), fsStartBtn=document.getElementById('fsStartBtn');
   startBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); if(state==='title') startGame(); }, {passive:false});
   fsStartBtn.addEventListener('click', async (e)=>{
     e.preventDefault(); e.stopPropagation();
@@ -579,7 +571,6 @@
 
       } else { // HSET
         if (nextIsBuffer){
-          // completed buffer; next we spawn a bar
           nextIsBuffer = false;
           spawnOneHorizontal();
           hBarsLeft--;
@@ -589,7 +580,6 @@
             vertSpawnedInCycle = 0;
           }
         } else {
-          // between bars spacing finished; spawn bar now
           spawnOneHorizontal();
           hBarsLeft--;
           nextSpawnPx += (hBarsLeft > 0) ? H_BETWEEN : H_BUFFER;
@@ -656,7 +646,6 @@
         ctx.save();
         ctx.translate(xR, o.y);
         if (o.sprite){
-          // sprite already oriented left across +X
           ctx.drawImage(o.sprite, 0, -h/2, w, h);
         } else {
           ctx.fillStyle='#3a9b6a';
@@ -668,6 +657,7 @@
   }
 
   /* ---------- Loop ---------- */
+  let bgImg=null, birdFallbackImg=null, birdSprite=null;
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; lastTs=ts;
 
@@ -696,9 +686,9 @@
     drawPixelFlame();
     bird.draw(frameDt);
 
-    if(state==='playing') collideAndScore(leftover);
-
     if(state!=='title'){ ctx.fillStyle='rgba(120,120,120,0.95)'; ctx.font='700 8px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
+
+    if(state==='playing') collideAndScore(leftover);
 
     requestAnimationFrame(loop);
   }
@@ -725,11 +715,6 @@
   })();
 
   /* ---------- Start at title ---------- */
-  const splash=document.getElementById('splash');
-  const gameOverCard=document.getElementById('gameOverCard');
-  const scoreEl=document.getElementById('scoreVal');
-  const lastEl=document.getElementById('lastVal');
-  const bestEl=document.getElementById('bestVal');
   showTitle();
 
 })();
