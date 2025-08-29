@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — Local Assets (v1.55)</title>
+<title>ROCKET MO — Local Assets (v1.56)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -33,18 +33,19 @@
   .rot-overlay.show{ display:flex }
   .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
 
-  /* Overlay container */
+  /* Overlay container (no pointer events; only the splash/card are clickable) */
   .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
 
-  /* Title Splash */
+  /* Title Splash — slightly more transparent so the bird & bg show through */
   .splash{
     pointer-events:auto; width:min(720px, 94vw);
     background:
-      radial-gradient(1200px 600px at 10% 10%, rgba(255, 198, 74, .15), transparent 60%),
-      radial-gradient(800px 500px at 90% 30%, rgba(255, 122, 58, .14), transparent 60%),
-      rgba(20,24,28,.86);
+      radial-gradient(1200px 600px at 10% 10%, rgba(255, 198, 74, .12), transparent 60%),
+      radial-gradient(800px 500px at 90% 30%, rgba(255, 122, 58, .12), transparent 60%),
+      rgba(20,24,28,.78);
     color:#fff; border-radius:18px; border:1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px);
-    box-shadow:0 22px 60px rgba(0,0,0,.55); padding:32px 26px 22px; text-align:center;
+    box-shadow:0 22px 60px rgba(0,0,0,.55); padding:26px 22px 18px; text-align:center;
+    margin-top:38px; /* give the bird a little space */
   }
   .logo{ display:inline-grid; place-items:center; margin-bottom:6px; }
   .logo .word{
@@ -53,7 +54,7 @@
     -webkit-background-clip: text; background-clip: text; color: transparent;
     filter: drop-shadow(0 4px 18px rgba(255, 203, 58, .35));
   }
-  .cta{ margin-top:14px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .cta{ margin-top:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
   .btn{
     pointer-events:auto; cursor:pointer; user-select:none;
     padding:10px 16px; font-weight:800; border-radius:12px; font-size:14px;
@@ -61,7 +62,7 @@
     box-shadow:0 6px 16px rgba(0,0,0,.25); transition: transform .06s ease, filter .06s ease;
   }
   .btn:active{ transform: translateY(1px) scale(.995); filter:brightness(.96) }
-  .hint{ margin-top:10px; font-size:12px; opacity:.85 }
+  .hint{ margin-top:8px; font-size:12px; opacity:.85 }
 
   /* Game Over Card */
   .card{
@@ -97,7 +98,7 @@
 <button id="fsBtn" class="fs-btn" title="Fullscreen">⛶ Fullscreen</button>
 
 <!-- Overlays -->
-<div class="overlay">
+<div class="overlay" id="overlay">
   <!-- TITLE SPLASH (bird/logo remains visible behind this) -->
   <div id="splash" class="splash" aria-label="Title Screen">
     <div class="logo"><div class="word">ROCKET MO</div></div>
@@ -135,7 +136,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.55';
+  const VERSION = '1.56';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ===== WORLD & PHYSICS ===== */
@@ -145,17 +146,17 @@
 
   /* ===== PIPES & SPACING ===== */
   const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
-  const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);   // global vertical spacing control
-  const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;     // first pipe distance now uses same rule
+  const VERTICAL_X_GAP = Math.round(SCROLL_PPS * 1.8);
+  const FIRST_VERTICAL_LEAD_PIXELS = VERTICAL_X_GAP;
 
   /* ===== HORIZONTAL CHALLENGE ===== */
   const CHALLENGE_BARS = 3;
   const HORIZ_SPACING_X = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y  = Math.round(H * 0.18);
-  const BUFFER_PIXELS   = Math.round(W * 0.06);   // as requested, keep at 0.06
+  const BUFFER_PIXELS   = Math.round(W * 0.06);   // keep at 0.06 as you prefer
   const HORIZ_LEAD_PIXELS = Math.round(W * 0.08);
 
-  /* ===== WRAP MARGINS (top/bottom) ===== */
+  /* ===== WRAP MARGINS ===== */
   const TOP_OVERLAP_FRAC=0.30;
   const BOTTOM_OVERLAP_FRAC=0.75;
 
@@ -178,7 +179,7 @@
 
   /* ===== HUD / UI ===== */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
-  const splash=document.getElementById('splash'), startBtn=document.getElementById('startBtn'), fsStartBtn=document.getElementById('fsStartBtn');
+  const overlayEl=document.getElementById('overlay'), splash=document.getElementById('splash'), startBtn=document.getElementById('startBtn'), fsStartBtn=document.getElementById('fsStartBtn');
   const gameOverCard=document.getElementById('gameOverCard'), finalScoreP=document.getElementById('finalScoreP');
   const fsBtn=document.getElementById('fsBtn');
   function inFullscreen(){ return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement; }
@@ -193,7 +194,7 @@
   /* ===== AUDIO (flap + crash only) ===== */
   let audioCtx=null, masterGain=null, audioReady=false, muted=false;
   function createAudio(){ if(audioReady) return; const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return; audioCtx=new AC({latencyHint:"interactive"}); masterGain=audioCtx.createGain(); masterGain.gain.value=muted?0:0.85; masterGain.connect(audioCtx.destination); audioReady=true; }
-  async function unlockAudio(){ try{ createAudio(); if(audioCtx && audioCtx.state!=='running'){ await audioCtx.resume(); } }catch(_){ }
+  async function unlockAudio(){ try{ createAudio(); if(audioCtx && audioCtx.state!=='running'){ await audioCtx.resume(); } }catch(_){ } }
   function setMuted(m){ muted=m; if(masterGain) masterGain.gain.value=muted?0:0.85; const b=document.getElementById('muteBtn'); b.textContent=muted?"🔇 Muted":"🔊 Sound"; b.setAttribute("aria-pressed", String(muted)); }
   document.getElementById('muteBtn').addEventListener('click', async (e)=>{ e.stopPropagation(); await unlockAudio(); setMuted(!muted); });
   function envGain(d=0.25,a=0.008,v=1){ if(!audioReady) return null; const g=audioCtx.createGain(); const t=audioCtx.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v,t+a); g.gain.exponentialRampToValueAtTime(0.0001,t+d); return g; }
@@ -471,9 +472,29 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   /* ===== BACKGROUND ===== */
-  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#1a1a1a"; ctx.fillRect(0,0,W,H); } }
+  function drawBackground(){
+    if(bgImg){
+      ctx.drawImage(bgImg,0,0,W,H);
+      return;
+    }
+    /* Smooth colorful fallback (no more flat black) */
+    const g1=ctx.createLinearGradient(0,0,0,H);
+    g1.addColorStop(0,'#0f1116');
+    g1.addColorStop(1,'#1a1e26');
+    ctx.fillStyle=g1; ctx.fillRect(0,0,W,H);
 
-  /* ===== FLAME (pixel-art) ===== */
+    const g2=ctx.createRadialGradient(W*0.16,H*0.25,50, W*0.16,H*0.25,420);
+    g2.addColorStop(0,'rgba(255,210,90,0.18)');
+    g2.addColorStop(1,'rgba(255,210,90,0.0)');
+    ctx.fillStyle=g2; ctx.beginPath(); ctx.rect(0,0,W,H); ctx.fill();
+
+    const g3=ctx.createRadialGradient(W*0.85,H*0.35,50, W*0.85,H*0.35,520);
+    g3.addColorStop(0,'rgba(255,120,60,0.14)');
+    g3.addColorStop(1,'rgba(255,120,60,0.0)');
+    ctx.fillStyle=g3; ctx.beginPath(); ctx.rect(0,0,W,H); ctx.fill();
+  }
+
+  /* ===== FLAME ===== */
   const flameCanvas=document.createElement('canvas'); flameCanvas.width=PIXEL_FLAME.gridW; flameCanvas.height=PIXEL_FLAME.gridH; const flameCtx=flameCanvas.getContext('2d',{alpha:true}); flameCtx.imageSmoothingEnabled=false;
   function drawPixelFlame(){
     if(over) return; // keep on during splash + gameplay; stop on game over
@@ -570,7 +591,7 @@ For high-density storage of relatively small and light items in tight quarters, 
       stepObstacles(STEP);
       bird.step(STEP);
 
-      // Vertical wrap (works during gameplay; keeps bird visible at the splash because v=0)
+      // Vertical wrap during gameplay
       const topWrap   = -bird.h * TOP_OVERLAP_FRAC;
       const bottomWrap=  H + bird.h * BOTTOM_OVERLAP_FRAC;
       if (started && !over){
@@ -638,7 +659,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     restartLocked=true; setTimeout(()=>{ restartLocked=false; },1000);
   }
 
-  /* ===== START / INPUT ===== */
+  /* ===== START / INPUT (extra-redundant so Android starts) ===== */
   function startGame(){
     started=true; over=false; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore;
@@ -666,8 +687,8 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   // Splash buttons
-  document.getElementById('startBtn').addEventListener('click', handleTap, {passive:false});
-  document.getElementById('fsStartBtn').addEventListener('click', async (e)=>{
+  startBtn.addEventListener('click', handleTap, {passive:false});
+  fsStartBtn.addEventListener('click', async (e)=>{
     e.preventDefault(); e.stopPropagation();
     try{
       const el=document.documentElement;
@@ -676,17 +697,13 @@ For high-density storage of relatively small and light items in tight quarters, 
     handleTap(e);
   }, {passive:false});
 
-  // Global inputs — tap/click/space anywhere (except HUD buttons & Game Over card)
-  document.addEventListener('pointerdown', (e)=>{
-    if(e.target.closest('#muteBtn, #fsBtn')) return;
-    if(e.target.closest('#gameOverCard')) return;
-    handleTap(e);
-  }, {passive:false, capture:true});
-  document.addEventListener('touchstart', (e)=>{
-    if(e.target.closest('#muteBtn, #fsBtn')) return;
-    if(e.target.closest('#gameOverCard')) return;
-    handleTap(e);
-  }, {passive:false, capture:true});
+  // Redundant starters: canvas, overlay, splash, whole document (pointer & click)
+  canvas.addEventListener('pointerdown', handleTap, {passive:false, capture:true});
+  overlayEl.addEventListener('pointerdown', handleTap, {passive:false});
+  splash.addEventListener('pointerdown', handleTap, {passive:false});
+  document.addEventListener('pointerdown', (e)=>{ if(e.target.closest('#muteBtn, #fsBtn, #gameOverCard')) return; handleTap(e); }, {passive:false, capture:true});
+  document.addEventListener('click', (e)=>{ if(e.target.closest('#muteBtn, #fsBtn, #gameOverCard')) return; if(!started) handleTap(e); }, {passive:false, capture:true});
+  document.addEventListener('touchstart', (e)=>{ if(e.target.closest('#muteBtn, #fsBtn, #gameOverCard')) return; handleTap(e); }, {passive:false, capture:true});
   document.addEventListener('keydown', async (e)=>{ if(e.code==='Space'||e.key===' '||e.key==='Enter'){ await handleTap(e); } }, {passive:false});
 
   /* ===== BOOT ===== */
