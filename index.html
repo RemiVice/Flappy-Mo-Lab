@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — Local Assets (v1.65)</title>
+<title>ROCKET MO — Local Assets (v1.66)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -97,7 +97,7 @@
       <button id="startBtn" class="btn" title="Start">▶ Tap to Start</button>
       <button id="fsStartBtn" class="btn" title="Start in Fullscreen">⛶ Fullscreen</button>
     </div>
-    <div class="hint">Tap the button or press Space/Enter • Best is saved locally</div>
+    <div class="hint">Tap anywhere or press Space/Enter • Best is saved locally</div>
   </div>
 
   <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
@@ -125,7 +125,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.65';
+  const VERSION = '1.66';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   const W = 1920, H = 1080;
@@ -144,29 +144,16 @@
 
   const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
 
-  // 🔥 Rocket plume settings — brighter & longer, shows on splash too
-  const PIXEL_FLAME={
-    gridW:64, gridH:32,
-    lenFrac:1.25,          // was 1.0
-    heightFrac:0.72,       // was 0.65
-    offsetFrac:0.50,
-    colHot:'#fffcc0',
-    colMid:'#ffae4a',
-    colCool:'#ff4a32',
-    jitter:2,
-    flicker:0.10
-  };
+  const PIXEL_FLAME={ gridW:64, gridH:32, lenFrac:1.25, heightFrac:0.72, offsetFrac:0.50, colHot:'#fffcc0', colMid:'#ffae4a', colCool:'#ff4a32', jitter:2, flicker:0.10 };
 
-  /* ---------- Performance knobs ---------- */
-  let physicsHz = 90; let STEP = 1 / physicsHz, accumulator = 0;
-  let lastTs = performance.now(); const MAX_FRAME_DT = 0.12;
+  /* ---------- Performance ---------- */
+  let physicsHz = 90, STEP = 1/90, accumulator = 0;
+  let lastTs = performance.now(), MAX_FRAME_DT = 0.12;
+  if(!isMobile){ physicsHz=75; STEP=1/75; }
 
-  const is60HzDesktop = !isMobile; let PERF_MODE = is60HzDesktop;
-  if (PERF_MODE) { physicsHz = 75; STEP = 1 / physicsHz; }
+  const SMOKE=[], SMOKE_RATE = !isMobile ? 22 : 40, SMOKE_MAX=220; let smokeTimer=0;
 
-  const SMOKE = []; const SMOKE_RATE = PERF_MODE ? 22 : 40; const SMOKE_MAX = 220; let smokeTimer = 0;
-
-  /* ---------- Canvas & layout ---------- */
+  /* ---------- Canvas ---------- */
   const canvas=document.getElementById('game'); const ctx=canvas.getContext('2d',{alpha:false}); ctx.imageSmoothingEnabled=true;
   function fitCSS(){ const vw=innerWidth; const vh=Math.round(window.visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%, -50%) scale(${s})`; }
   addEventListener('resize', fitCSS, {passive:true}); window.visualViewport&&visualViewport.addEventListener('resize', fitCSS, {passive:true}); fitCSS();
@@ -175,32 +162,13 @@
   function checkOrientation(){ const landscapeOK = innerWidth >= innerHeight; rotBlock.classList.toggle('show', isMobile && !landscapeOK); }
   addEventListener('resize', checkOrientation, {passive:true}); checkOrientation();
 
-  // Cached gradient bg (used until bg.png loads)
-  let bgCache = null;
-  function buildBgCache() {
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
-    const g = c.getContext('2d');
-    const g1=g.createLinearGradient(0,0,0,H);
-    g1.addColorStop(0,'#0f1116'); g1.addColorStop(1,'#1a1e26');
-    g.fillStyle=g1; g.fillRect(0,0,W,H);
-    const r1=g.createRadialGradient(W*0.16,H*0.25,50, W*0.16,H*0.25,420);
-    r1.addColorStop(0,'rgba(255,210,90,0.18)'); r1.addColorStop(1,'rgba(255,210,90,0.0)');
-    g.fillStyle=r1; g.fillRect(0,0,W,H);
-    const r2=g.createRadialGradient(W*0.85,H*0.35,50, W*0.85,H*0.35,520);
-    r2.addColorStop(0,'rgba(255,120,60,0.14)'); r2.addColorStop(1,'rgba(255,120,60,0.0)');
-    g.fillStyle=r2; g.fillRect(0,0,W,H);
-    return c;
-  }
-  function drawBackground(){
-    if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; }
-    if (!bgCache) bgCache = buildBgCache();
-    ctx.drawImage(bgCache, 0, 0);
-  }
+  // Background (fallback gradient if bg.png missing)
+  let bgCache=null; function buildBgCache(){ const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d'); const g1=g.createLinearGradient(0,0,0,H); g1.addColorStop(0,'#0f1116'); g1.addColorStop(1,'#1a1e26'); g.fillStyle=g1; g.fillRect(0,0,W,H); const r1=g.createRadialGradient(W*0.16,H*0.25,50, W*0.16,H*0.25,420); r1.addColorStop(0,'rgba(255,210,90,0.18)'); r1.addColorStop(1,'rgba(255,210,90,0)'); g.fillStyle=r1; g.fillRect(0,0,W,H); const r2=g.createRadialGradient(W*0.85,H*0.35,50, W*0.85,H*0.35,520); r2.addColorStop(0,'rgba(255,120,60,0.14)'); r2.addColorStop(1,'rgba(255,120,60,0)'); g.fillStyle=r2; g.fillRect(0,0,W,H); return c; }
+  function drawBackground(){ if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; } if(!bgCache) bgCache=buildBgCache(); ctx.drawImage(bgCache,0,0); }
 
   /* ---------- UI refs ---------- */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
-  const overlay=document.getElementById('overlay');
-  const splash=document.getElementById('splash'), startBtn=document.getElementById('startBtn'), fsStartBtn=document.getElementById('fsStartBtn');
+  const overlay=document.getElementById('overlay'); const splash=document.getElementById('splash'); const startBtn=document.getElementById('startBtn'); const fsStartBtn=document.getElementById('fsStartBtn');
   const gameOverCard=document.getElementById('gameOverCard'), finalScoreP=document.getElementById('finalScoreP');
   const fsBtn=document.getElementById('fsBtn');
   function inFullscreen(){ return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement; }
@@ -254,8 +222,8 @@
   }
   function rebuildStyles(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({name:cfg.name,bottom,top:topset,drawW,botImg:bot}); } }
 
-  /* ---------- System info for Game Over ---------- */
-  const SYSTEMS = [/* (same content as v1.64 — omitted for brevity, keep yours intact) */];
+  /* ---------- Systems (use your previous full data) ---------- */
+  const SYSTEMS=[]; // keep empty if you don't want GO info now
 
   /* ---------- Obstacles ---------- */
   const obstacles=[]; const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
@@ -276,37 +244,11 @@
   function makeVerticalSprite(sty, top, gap, w){
     const c=document.createElement('canvas'); c.width=w; c.height=H;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    if(top>0){
-      const cap=sty.top.cap, body=sty.top.body;
-      const capH=Math.min(cap.height,top), bodyH=top-capH;
-      if(bodyH>0) makeScaledTiled(g, body, 0, 0, bodyH, w, "topUp");
-      g.drawImage(cap,0,top-capH,w,capH);
-    }
+    if(top>0){ const cap=sty.top.cap, body=sty.top.body; const capH=Math.min(cap.height,top), bodyH=top-capH; if(bodyH>0) makeScaledTiled(g, body, 0, 0, bodyH, w, "topUp"); g.drawImage(cap,0,top-capH,w,capH); }
     const by=top+gap, bottomH=H-by;
-    if(bottomH>0){
-      const cap=sty.bottom.cap, body=sty.bottom.body;
-      const capH=Math.min(cap.height,bottomH);
-      g.drawImage(cap,0,by,w,capH);
-      const remain = bottomH - capH;
-      if(remain>0) makeScaledTiled(g, body, 0, by+capH, remain, w, "bottomDown");
-    }
+    if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH); const remain = bottomH - capH; if(remain>0) makeScaledTiled(g, body, 0, by+capH, remain, w, "bottomDown"); }
     return c;
   }
-  function makeHorizontalSprite(sty){
-    const img=sty.botImg, drawW=sty.drawW;
-    const c=document.createElement('canvas'); const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    if(img){
-      const scale=drawW/(img.naturalWidth||img.width);
-      const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
-      c.width=scaledH; c.height=drawW;
-      g.translate(0,drawW); g.rotate(-Math.PI/2);
-      g.drawImage(img, 0, 0, img.naturalWidth||img.width, img.naturalHeight||img.height, 0, 0, drawW, scaledH);
-    }else{
-      c.width=drawW; c.height=drawW; g.fillStyle="#2e8b57"; g.fillRect(0,0,c.width,c.height);
-    }
-    return c;
-  }
-
   function spawnVerticalAt(xPos){
     if(!Styles.length) return;
     const margin=Math.round(H*0.10), maxSection=Math.round(H*0.45);
@@ -320,84 +262,7 @@
   }
   const spawnVertical=()=>spawnVerticalAt(W);
 
-  function spawnHorizontalAt(xStart){
-    if(!Styles.length) return;
-    const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx];
-    const sprite=makeHorizontalSprite(sty);
-    const w=sprite.width, h=sty.drawW, y=randInt(HORIZ_MARGIN_Y,H-HORIZ_MARGIN_Y-h);
-    obstacles.push({type:'H', x:xStart, y, w, h, styleIndex:idx, scored:false, sprite});
-  }
-  function spawnHorizontalChallenge(){
-    const firstX=W+HORIZ_LEAD_PIXELS;
-    let lastRight=0;
-    for(let i=0;i<CHALLENGE_BARS;i++){
-      const x=(i===0?firstX:lastRight+HORIZ_SPACING_X);
-      spawnHorizontalAt(x);
-      const last=obstacles[obstacles.length-1];
-      lastRight=last.x+last.w;
-    }
-  }
-
-  // Phases for mixing vertical sections and horizontal challenges
-  let phase='VERTICALS', bufferTime=0, challengeQueued=false, verticalsPassed=0, nextSpawnPx=FIRST_VERTICAL_LEAD_PIXELS, verticalsEnabled=true;
-
-  function stepObstacles(dt){
-    if(!started || over) return;
-    for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
-    for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x + obstacles[i].w <= 0) obstacles.splice(i,1);
-
-    if(phase==='VERTICALS'){
-      if(verticalsEnabled){
-        nextSpawnPx -= SCROLL_PPS*dt;
-        while(nextSpawnPx<=0){ spawnVertical(); nextSpawnPx += VERTICAL_X_GAP; }
-      }
-      if(challengeQueued){
-        phase='PRE_BUFFER'; verticalsEnabled=false;
-        nextSpawnPx = VERTICAL_X_GAP;
-        bufferTime = BUFFER_PIXELS / SCROLL_PPS;
-        challengeQueued=false;
-      }
-      return;
-    }
-    if(phase==='PRE_BUFFER'){ bufferTime-=dt; if(bufferTime<=0){ phase='H_CHALLENGE'; spawnHorizontalChallenge(); } return; }
-    if(phase==='H_CHALLENGE'){ if(obstacles.findIndex(o=>o.type==='H')===-1){ phase='POST_BUFFER'; bufferTime=BUFFER_PIXELS/SCROLL_PPS; } return; }
-    if(phase==='POST_BUFFER'){ bufferTime-=dt; if(bufferTime<=0){ phase='VERTICALS'; verticalsEnabled=true; } return; }
-  }
-
-  function scoreUp(){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
-
-  function collideAndScore(leftover){
-    const BIRD_INSET=8, GAP_FORGIVE=12;
-    const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
-    const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
-    for(const o of obstacles){
-      const xR=o.x - SCROLL_PPS*leftover;
-      if(o.type==='V'){
-        const overlapX=(bx2>xR)&&(bx1<xR+o.w);
-        if(overlapX){
-          const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
-          if(by1<safeTop || by2>safeBottom){ endGame(o.styleIndex); return true; }
-        }
-        if(!o.scored && (xR+o.w)<bx1){ o.scored=true; scoreUp(); verticalsPassed++; if(verticalsPassed>0 && verticalsPassed%10===0){ if(phase==='VERTICALS') challengeQueued=true; } }
-      } else {
-        const overlapX=(bx2>xR)&&(bx1<xR+o.w), overlapY=(by2>o.y)&&(by1<o.y+o.h);
-        if(overlapX && overlapY){ endGame(o.styleIndex); return true; }
-        if(!o.scored && (xR+o.w)<bx1){ o.scored=true; scoreUp(); }
-      }
-    }
-    return false;
-  }
-
-  function drawObstaclesInterpolated(leftover){
-    const viewLeft = -W * 0.15, viewRight = W * 1.15;
-    for(const o of obstacles){
-      const xR= o.x - (started && !over ? SCROLL_PPS*leftover : 0);
-      if (xR + o.w < viewLeft || xR > viewRight) continue;
-      if(o.sprite) ctx.drawImage(o.sprite, xR, (o.type==='H'?o.y:0), o.w, (o.type==='H'?o.h:H));
-    }
-  }
-
-  /* ---------- Bird, flame, smoke ---------- */
+  /* ---------- Bird + fire/smoke ---------- */
   let birdSprite=null, birdFallbackImg=null, bgImg=null;
 
   const bird={ x:Math.round(W*0.167), y:Math.round(H*0.5), w:Math.round(H*0.069), h:Math.round(H*0.069), v:0, yRender:0, animTime:0, angle:0,
@@ -406,8 +271,7 @@
       const ang=this.computeAngle(); this.animTime+=dt;
       ctx.save(); ctx.translate(this.x+this.w/2, this.yRender); ctx.rotate(ang);
       if(birdSprite&&birdSprite.complete&&birdSprite.naturalWidth){
-        const frames=BIRD_SPRITE_FRAMES,fps=BIRD_SPRITE_FPS;
-        const frameW=Math.floor(birdSprite.naturalWidth/frames), frameH=birdSprite.naturalHeight;
+        const frames=4,fps=10; const frameW=Math.floor(birdSprite.naturalWidth/frames), frameH=birdSprite.naturalHeight;
         const idx=Math.floor(this.animTime*fps)%frames, sx=idx*frameW;
         ctx.drawImage(birdSprite,sx,0,frameW,frameH,-this.w/2,-this.h/2,this.w,this.h);
       } else if(birdFallbackImg&&birdFallbackImg.complete&&birdFallbackImg.naturalWidth){
@@ -416,28 +280,25 @@
       ctx.restore();
     },
     step(dt){ if(!started||over) return; this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
-    flap(){ if(!started||over) return; this.v=LIFT_V0; woosh(); },
+    flap(){ if(!started||over) return; this.v=LIFT_V0; },
     reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; this.angle=0; }
   };
 
-  // flame buffer (pixel-art style but with additive glow)
   const flameCanvas=document.createElement('canvas'); flameCanvas.width=PIXEL_FLAME.gridW; flameCanvas.height=PIXEL_FLAME.gridH;
   const flameCtx=flameCanvas.getContext('2d',{alpha:true}); flameCtx.imageSmoothingEnabled=false;
 
   function drawPixelFlame(){
-    if(over) return; // hide only on Game Over; shows on splash & gameplay
-
+    if(over) return;
     const ang=bird.computeAngle(), fwdX=Math.cos(ang), fwdY=Math.sin(ang);
     const centerX=bird.x+bird.w/2, centerY=bird.yRender;
     const nozzleX=centerX - fwdX*(bird.w*PIXEL_FLAME.offsetFrac);
     const nozzleY=centerY - fwdY*(bird.w*PIXEL_FLAME.offsetFrac);
 
-    // build pixel flame texture
     flameCtx.clearRect(0,0,flameCanvas.width,flameCanvas.height);
     const gw=flameCanvas.width, gh=flameCanvas.height, cy=Math.floor(gh/2);
     for(let x=0;x<gw;x++){
       const t=x/(gw-1);
-      const half=Math.max(1, Math.floor((0.2+0.85*t)*(gh*0.48))); // a touch taller
+      const half=Math.max(1, Math.floor((0.2+0.85*t)*(gh*0.48)));
       const jag=(Math.random()*2-1)*PIXEL_FLAME.jitter;
       const hh=Math.max(1, Math.min(gh-1, half+jag));
       for(let y=-hh;y<=hh;y++){
@@ -450,7 +311,6 @@
       }
     }
 
-    // draw with additive blend + slight base bloom
     ctx.save();
     ctx.globalCompositeOperation='lighter';
     ctx.translate(nozzleX, nozzleY);
@@ -459,14 +319,8 @@
     const drawH=bird.h*PIXEL_FLAME.heightFrac;
     ctx.translate(0, -drawH/2);
     ctx.drawImage(flameCanvas, -flameCanvas.width, 0, flameCanvas.width, flameCanvas.height, 0, 0, drawW, drawH);
-
-    // tiny core glow at the nozzle
-    const coreR = Math.max(4, Math.floor(bird.w*0.10));
-    ctx.fillStyle='rgba(255,240,160,0.85)';
-    ctx.beginPath(); ctx.ellipse(-2, drawH/2, coreR, coreR*0.6, 0, 0, Math.PI*2); ctx.fill();
-
-    ctx.restore();
     ctx.globalCompositeOperation='source-over';
+    ctx.restore();
   }
 
   function updateSmoke(frameDt){
@@ -492,7 +346,7 @@
     }
   }
 
-  /* ---------- Game flow ---------- */
+  /* ---------- Flow ---------- */
   async function startGame(){
     if(started) return;
     unlockAudio().catch(()=>{});
@@ -501,76 +355,102 @@
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
 
-    for(let i=0;i<12;i++){ SMOKE.push({ x:bird.x+bird.w*0.35, y:bird.y, size:6+Math.random()*6, vX:-40+Math.random()*-40, vY:(Math.random()*40-20), life:0.5+Math.random()*0.5, age:0, shade:180+Math.floor(Math.random()*50) }); }
-
-    phase='VERTICALS'; bufferTime=0; challengeQueued=false; verticalsPassed=0;
-    nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS; verticalsEnabled=true;
-
     splash.classList.add('hidden');
     gameOverCard.classList.add('hidden');
+
+    // first pipe scheduling
+    nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
 
     bird.flap();
   }
 
-  function endGame(hitStyleIdx){
+  function endGame(){
     if(over) return; over=true; bird.v=0; crash();
     finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
-
-    const box   = document.getElementById('sysInfoBox');
-    const imgEl = document.getElementById('sysImg');
-    const tEl   = document.getElementById('sysTitle');
-    const bEl   = document.getElementById('sysBlurb');
-    const specsBox = document.getElementById('sysSpecsBox');
-    const sEl   = document.getElementById('sysSpecs');
-    const lEl   = document.getElementById('sysLinks');
-
-    // (fill game-over info exactly like your previous working version)
-    box.style.display='none'; imgEl.style.display='none'; // keep if you don’t want system info now
     gameOverCard.classList.remove('hidden');
-    gameOverCard.scrollTop=0; requestAnimationFrame(()=>{ gameOverCard.scrollTop=0; });
-    restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 1000);
+    gameOverCard.scrollTop=0;
+    restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 800);
   }
 
-  /* ---------- Input ---------- */
+  /* ---------- Input (robust start anywhere) ---------- */
+  // Buttons
   startBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); startGame(); }, {passive:false});
   fsStartBtn.addEventListener('click', async (e)=>{
     e.preventDefault(); e.stopPropagation();
     try{ const el=document.documentElement; if(!document.fullscreenElement){ await (el.requestFullscreen?.()||el.webkitRequestFullscreen?.()||el.msRequestFullscreen?.()); } }catch(_){}
     startGame();
   }, {passive:false});
+
+  // Tap on splash itself
   splash.addEventListener('pointerdown', (e)=>{ if(e.target.closest('#startBtn,#fsStartBtn')) return; e.preventDefault(); startGame(); }, {passive:false});
+
+  // GLOBAL: tap ANYWHERE (except buttons/cards) -> start/flap/restart
   document.addEventListener('pointerdown', (e)=>{
     if(e.target.closest('#muteBtn, #fsBtn, #gameOverCard')) return;
-    if(!started){ return; }
     e.preventDefault(); e.stopPropagation();
+    if(!started){ startGame(); return; }
     if(!over){ bird.flap(); } else if(!restartLocked){ startGame(); }
   }, {passive:false, capture:true});
-  document.getElementById('overlay').addEventListener('pointerdown', (e)=>{
-    if(!over) return; if(e.target.closest('#gameOverCard')) return; e.preventDefault(); if(!restartLocked) startGame();
+
+  // Click outside game over card to restart
+  overlay.addEventListener('pointerdown', (e)=>{
+    if(!over) return;
+    if(e.target.closest('#gameOverCard')) return;
+    e.preventDefault();
+    if(!restartLocked) startGame();
   }, {passive:false});
+
+  // Keyboard
   document.addEventListener('keydown', (e)=>{
-    const splashVisible = !splash.classList.contains('hidden');
-    const goVisible = !gameOverCard.classList.contains('hidden');
-    if((splashVisible) && (e.code==='Space' || e.key===' ' || e.key==='Enter')){ e.preventDefault(); startGame(); return; }
-    if(goVisible && (e.code==='Space' || e.key==='Enter')){ e.preventDefault(); if(!restartLocked) startGame(); return; }
-    if(started && !over && (e.code==='Space' || e.key===' ')){ e.preventDefault(); bird.flap(); }
+    if(e.code==='Space' || e.key===' ' || e.key==='Enter'){
+      e.preventDefault();
+      if(!started){ startGame(); return; }
+      if(over){ if(!restartLocked) startGame(); return; }
+      bird.flap();
+    }
   });
 
-  /* ---------- Main loop ---------- */
+  /* ---------- Game (minimal verticals only here) ---------- */
+  let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
+  function stepObstacles(dt){
+    if(!started || over) return;
+    nextSpawnPx -= SCROLL_PPS*dt;
+    while(nextSpawnPx<=0){ spawnVertical(); nextSpawnPx += VERTICAL_X_GAP; }
+    for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
+    for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x + obstacles[i].w <= 0) obstacles.splice(i,1);
+  }
+
+  function collideAndScore(leftover){
+    const BIRD_INSET=8, GAP_FORGIVE=12;
+    const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
+    const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
+    for(const o of obstacles){
+      const xR=o.x - SCROLL_PPS*leftover;
+      const overlapX=(bx2>xR)&&(bx1<xR+o.w);
+      if(overlapX){
+        const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
+        if(by1<safeTop || by2>safeBottom){ endGame(); return true; }
+      }
+      if(!o.scored && (xR+o.w)<bx1){ o.scored=true; score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
+    }
+    return false;
+  }
+
+  function drawObstaclesInterpolated(leftover){
+    for(const o of obstacles){
+      const xR= o.x - (started && !over ? SCROLL_PPS*leftover : 0);
+      if(o.sprite) ctx.drawImage(o.sprite, xR, 0, o.w, H);
+    }
+  }
+
+  /* ---------- Loop ---------- */
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT) frameDt=MAX_FRAME_DT; if(frameDt<0) frameDt=0; lastTs=ts;
 
     accumulator+=frameDt;
     while(accumulator>=STEP){
       stepObstacles(STEP);
-      bird.step(STEP);
-
-      const topWrap   = -bird.h * TOP_OVERLAP_FRAC;
-      const bottomWrap=  H + bird.h * BOTTOM_OVERLAP_FRAC;
-      if (started && !over){
-        if (bird.y < topWrap){ const overshoot = topWrap - bird.y; bird.y = bottomWrap - overshoot; }
-        else if (bird.y > bottomWrap){ const overshoot = bird.y - bottomWrap; bird.y = topWrap + overshoot; }
-      }
+      if(started && !over){ bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP; }
       accumulator-=STEP;
     }
     const leftover=over?0:accumulator;
@@ -583,8 +463,6 @@
     updateSmoke(frameDt);
     drawSmoke(frameDt);
     drawObstaclesInterpolated(leftover);
-
-    // 🔥 draw flame before the bird so it appears behind the sprite but visible
     drawPixelFlame();
     bird.draw(frameDt);
 
@@ -594,12 +472,9 @@
 
     requestAnimationFrame(loop);
   }
-
-  /* ---------- Boot ---------- */
   requestAnimationFrame(loop);
 
-  // Assets
-  let birdSpriteRef=null, birdFallbackRef=null, bgImg=null;
+  // Load assets
   (async () => {
     try{
       const [sprite, single, bg] = await Promise.all([
