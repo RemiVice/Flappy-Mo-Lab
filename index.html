@@ -2,15 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Flappy Mo — Local Assets (v1.50-wraptest)</title>
+<title>Flappy Mo — Local Assets (v1.51-title)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
-  :root{ --glass:rgba(20,24,28,.80); --bg:#0b0d10; }
+  :root{
+    --glass:rgba(20,24,28,.80);
+    --bg:#0b0d10;
+    --accent:#ffd54a;
+    --accent2:#ff7a3a;
+  }
   * { box-sizing: border-box; }
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden; }
-  body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
+  body{
+    font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent;
+  }
 
+  /* Game canvas (1080p internal res; scaled via CSS) */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -20,7 +29,78 @@
     border-radius:14px; border:1px solid rgba(255,255,255,.08);
   }
 
+  /* HUD */
+  .hud{
+    position:fixed; top:10px; left:50%; transform:translateX(-50%);
+    display:flex; gap:12px; pointer-events:none; z-index:12
+  }
+  .badge{
+    background:var(--glass); border-radius:10px; padding:4px 10px;
+    color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center;
+    border:1px solid rgba(255,255,255,.1)
+  }
+  .mute-btn, .fs-btn{
+    position:fixed; z-index:13; pointer-events:auto;
+    background:var(--glass); color:#fff; border:1px solid rgba(255,255,255,.15);
+    border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .mute-btn{ right:12px; top:12px; }
+  .fs-btn{ right:12px; bottom:12px; }
+
+  /* Non-blocking rotate hint */
+  .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:9; pointer-events:none; }
+  .rot-overlay.show{ display:flex }
+  .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
+
+  /* Overlay container */
   .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
+
+  /* Title Splash (shows immediately; no assets needed) */
+  .splash{
+    pointer-events:auto;
+    width:min(720px, 94vw);
+    background:
+      radial-gradient(1200px 600px at 10% 10%, rgba(255, 198, 74, .15), transparent 60%),
+      radial-gradient(800px 500px at 90% 30%, rgba(255, 122, 58, .14), transparent 60%),
+      rgba(20,24,28,.86);
+    color:#fff; border-radius:18px;
+    border:1px solid rgba(255,255,255,.12);
+    backdrop-filter: blur(6px);
+    box-shadow:0 22px 60px rgba(0,0,0,.55);
+    padding:26px 26px 22px;
+    text-align:center;
+  }
+  .logo{
+    display:inline-grid; place-items:center; margin-bottom:6px;
+  }
+  .logo .word{
+    font-weight:800;
+    font-size: clamp(28px, 7.2vw, 56px);
+    letter-spacing: 0.5px;
+    background: linear-gradient(180deg, var(--accent) 0%, #fff7c5 35%, var(--accent2) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 4px 18px rgba(255, 203, 58, 0.35));
+  }
+  .logo .mini{
+    margin-top:2px; font-weight:700; font-size: clamp(12px, 2.5vw, 15px); opacity:.9;
+  }
+  .cta{
+    margin-top:14px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;
+  }
+  .btn{
+    pointer-events:auto; cursor:pointer; user-select:none;
+    padding:10px 16px; font-weight:800; border-radius:12px; font-size:14px;
+    border:1px solid rgba(255,255,255,.18);
+    color:#0b0d10; background:#ffe07a;
+    box-shadow:0 6px 16px rgba(0,0,0,.25);
+    transition: transform .06s ease, box-shadow .06s ease, filter .06s ease;
+  }
+  .btn:active{ transform: translateY(1px) scale(.995); filter:brightness(.96) }
+  .hint{ margin-top:10px; font-size:12px; opacity:.85 }
+  .list{ margin:10px auto 0; max-width:520px; text-align:left; font-size:12px; opacity:.9; line-height:1.5 }
+  .kbd{ font-weight:800; background:rgba(255,255,255,.1); padding:2px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.15) }
+
+  /* Classic Cards (Game Over) */
   .card{
     pointer-events:auto; color:#fff; background:var(--glass);
     border:1px solid rgba(255,255,255,.08); border-radius:14px;
@@ -33,24 +113,11 @@
   .card p{ margin:0; font-size:clamp(13px,3.2vw,16px); color:#fff; }
   .hidden{ display:none }
 
-  .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
-  .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
-
-  /* Non-blocking rotate hint */
-  .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:9; pointer-events:none; }
-  .rot-overlay.show{ display:flex }
-  .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
-
-  .mute-btn, .fs-btn{ position:fixed; z-index:13; pointer-events:auto; background:var(--glass); color:#fff; border:1px solid rgba(255,255,255,.15); border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700; cursor:pointer; }
-  .mute-btn{ right:12px; top:12px; }
-  .fs-btn{ right:12px; bottom:12px; }
-
   #sysImg {
     max-width:100%; max-height:240px; object-fit:contain;
     background:rgba(255,255,255,.06);
     border:1px solid rgba(255,255,255,.1);
-    border-radius:10px; margin:10px auto; /* centered */
-    display:none; opacity:0; transition:opacity .25s ease;
+    border-radius:10px; margin:10px auto; display:none; opacity:0; transition:opacity .25s ease;
   }
   #sysInfoBox, #sysInfoBox * { color:#fff !important; }
   #sysBlurb { white-space:pre-line; }
@@ -74,16 +141,28 @@
 
 <!-- Overlays -->
 <div class="overlay">
-  <div id="startCard" class="card" tabindex="0" aria-label="Tap or press Enter to start">
-    <h1>Tap to Start</h1>
-    <p>Tap again to flap • Best is saved</p>
+  <!-- TITLE SPLASH -->
+  <div id="splash" class="splash">
+    <div class="logo">
+      <div class="word">FLAPPY MO</div>
+      <div class="mini">Rocket Wrap Edition</div>
+    </div>
+    <div class="cta">
+      <button id="startBtn" class="btn" title="Start">▶ Tap to Start</button>
+      <button id="fsStartBtn" class="btn" title="Start in Fullscreen">⛶ Fullscreen</button>
+    </div>
+    <div class="list">
+      <div>• Tap / <span class="kbd">Space</span> to flap</div>
+      <div>• Wrap on top/bottom • Hit a pipe = Game Over</div>
+    </div>
+    <div class="hint">Best score is saved locally</div>
   </div>
 
+  <!-- GAME OVER -->
   <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
     <h1>Game Over</h1>
     <p id="finalScoreP">Score: 0 • Best: 0</p>
     <p style="opacity:.85;font-size:12px;margin-top:8px">Tap <b>outside</b> this window to restart (after 1s)</p>
-
     <img id="sysImg" alt="System image" />
     <div id="sysInfoBox" style="margin-top:12px; text-align:left; display:none">
       <div style="font-weight:800; font-size:16px; margin-bottom:6px">System: <span id="sysTitle">—</span></div>
@@ -106,7 +185,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.50-wraptest';
+  const VERSION = '1.51-title';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ===== WORLD & PHYSICS ===== */
@@ -126,8 +205,7 @@
   const BUFFER_PIXELS=Math.round(W*0.06);  // your 6% buffer
   const HORIZ_LEAD_PIXELS=Math.round(W*0.08);
 
-  /* ===== TOP/BOTTOM WRAP GRACE =====
-     (we used these before to end the game; now we use them as wrap margins) */
+  /* ===== WRAP MARGINS ===== */
   const TOP_OVERLAP_FRAC=0.30;
   const BOTTOM_OVERLAP_FRAC=0.75;
 
@@ -150,7 +228,8 @@
 
   /* ===== HUD ===== */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
-  const startCard=document.getElementById('startCard'), gameOverCard=document.getElementById('gameOverCard'), finalScoreP=document.getElementById('finalScoreP');
+  const splash=document.getElementById('splash'), startBtn=document.getElementById('startBtn'), fsStartBtn=document.getElementById('fsStartBtn');
+  const gameOverCard=document.getElementById('gameOverCard'), finalScoreP=document.getElementById('finalScoreP');
   const fsBtn=document.getElementById('fsBtn');
   function inFullscreen(){ return document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement; }
   function updateFsBtn(){ fsBtn.textContent = inFullscreen() ? "⤢ Exit" : "⛶ Fullscreen"; }
@@ -206,7 +285,7 @@
   }
   function rebuildStyles(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({name:cfg.name,bottom,top:topset,drawW,botImg:bot}); } }
 
-  /* ===== SYSTEM INFO (Game Over) ===== */
+  /* ===== SYSTEM INFO FOR GAME OVER ===== */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -443,9 +522,9 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   /* ===== BACKGROUND ===== */
-  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#ffe77a"; ctx.fillRect(0,0,W,H); } }
+  function drawBackground(){ if(bgImg) ctx.drawImage(bgImg,0,0,W,H); else { ctx.fillStyle="#1a1a1a"; ctx.fillRect(0,0,W,H); } }
 
-  /* ===== FLAME (pixel-art) ===== */
+  /* ===== FLAME & SMOKE ===== */
   const flameCanvas=document.createElement('canvas'); flameCanvas.width=PIXEL_FLAME.gridW; flameCanvas.height=PIXEL_FLAME.gridH; const flameCtx=flameCanvas.getContext('2d',{alpha:true}); flameCtx.imageSmoothingEnabled=false;
   function drawPixelFlame(){
     if(!started || over) return;
@@ -485,7 +564,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     ctx.imageSmoothingEnabled=true;
   }
 
-  /* ===== SMOKE ===== */
   function updateSmoke(frameDt){
     smokeTimer += frameDt * SMOKE_RATE;
     while (smokeTimer >= 1) {
@@ -537,18 +615,16 @@ For high-density storage of relatively small and light items in tight quarters, 
         stepObstacles(STEP);
         bird.step(STEP);
 
-        // ---- VERTICAL WRAP INSTEAD OF GAME OVER ----
+        // Vertical wrap (no death on ceiling/floor)
         const topWrap   = -bird.h * TOP_OVERLAP_FRAC;
         const bottomWrap=  H + bird.h * BOTTOM_OVERLAP_FRAC;
         if (bird.y < topWrap){
-          // how far past the top did we go?
           const overshoot = topWrap - bird.y;
-          bird.y = bottomWrap - overshoot; // appear near bottom with same velocity/angle
+          bird.y = bottomWrap - overshoot;
         } else if (bird.y > bottomWrap){
           const overshoot = bird.y - bottomWrap;
-          bird.y = topWrap + overshoot;    // appear near top with same velocity/angle
+          bird.y = topWrap + overshoot;
         }
-        // --------------------------------------------
       }
       accumulator-=STEP;
     }
@@ -563,56 +639,53 @@ For high-density storage of relatively small and light items in tight quarters, 
     bird.draw(frameDt);
     if(started && !over) collideAndScore(leftover);
 
+    // Tiny version tag
     ctx.fillStyle='rgba(120,120,120,0.95)'; ctx.font='700 8px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14);
+
     requestAnimationFrame(loop);
   }
 
-  /* ===== GAME OVER PANEL ===== */
+  /* ===== GAME OVER ===== */
   function endGame(hitStyleIdx){
     if(over) return; over=true; bird.v=0; playHit();
     finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
-
     const box=document.getElementById('sysInfoBox'), imgEl=document.getElementById('sysImg'), tEl=document.getElementById('sysTitle'), bEl=document.getElementById('sysBlurb'), specsBox=document.getElementById('sysSpecsBox'), sEl=document.getElementById('sysSpecs'), lEl=document.getElementById('sysLinks');
 
-    if(hitStyleIdx!=null && SYSTEMS[hitStyleIdx]){
-      const info=SYSTEMS[hitStyleIdx];
+    // (Show system details if a style index was hit)
+    const SYSTEMS_MAP = window.__SYSTEMS__ || SYSTEMS;
+    if(hitStyleIdx!=null && SYSTEMS_MAP[hitStyleIdx]){
+      const info=SYSTEMS_MAP[hitStyleIdx];
       tEl.textContent=info.title||`System ${hitStyleIdx+1}`;
       bEl.textContent=info.blurb||'';
       lEl.innerHTML = info.tds && info.tds!=='#' ? `<a href="${info.tds}" target="_blank" rel="noopener" style="color:#7dcfff;text-decoration:underline">📄 Technical Data Sheet</a>` : '';
-
       if(info.img && info.img!=='#'){
-        imgEl.style.opacity='0';
-        imgEl.onload=()=>{ imgEl.style.opacity='1'; };
-        imgEl.src=info.img;
-        imgEl.style.display='block';
+        imgEl.style.opacity='0'; imgEl.onload=()=>{ imgEl.style.opacity='1'; };
+        imgEl.src=info.img; imgEl.style.display='block';
       } else { imgEl.style.display='none'; }
 
       sEl.innerHTML='';
-      if(info.specTable && Array.isArray(info.specTable.headers) && Array.isArray(info.specTable.rows)){
-        sEl.innerHTML='<thead><tr>'+info.specTable.headers.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody></tbody>';
+      if(info.specTable){
+        const {headers,rows}=info.specTable;
+        sEl.innerHTML='<thead><tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody></tbody>';
         const tbody=sEl.querySelector('tbody');
-        info.specTable.rows.forEach(row=>{ const tr=document.createElement('tr'); tr.innerHTML=row.map((cell,i)=>`<td${i===0?' style="font-weight:600"':''}>${cell}</td>`).join(''); tbody.appendChild(tr); });
+        rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=r.map((c,i)=>`<td${i===0?' style="font-weight:600"':''}>${c}</td>`).join(''); tbody.appendChild(tr); });
         specsBox.style.display='block';
       } else if (info.specHeaders && info.specs && info.specs.length){
         sEl.innerHTML='<thead><tr>'+info.specHeaders.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody></tbody>';
         const tbody=sEl.querySelector('tbody');
         info.specs.forEach(([k,v])=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td style="font-weight:600">${k}</td><td>${v}</td>`; tbody.appendChild(tr); });
         specsBox.style.display='block';
-      } else {
-        specsBox.style.display='none';
-      }
+      } else { specsBox.style.display='none'; }
       box.style.display='block';
     } else {
-      box.style.display='none';
-      imgEl.style.display='none';
+      box.style.display='none'; imgEl.style.display='none';
     }
-
     gameOverCard.classList.remove('hidden');
     gameOverCard.scrollTop=0; requestAnimationFrame(()=>{ gameOverCard.scrollTop=0; });
     restartLocked=true; setTimeout(()=>{ restartLocked=false; },1000);
   }
 
-  /* ===== START/INPUT ===== */
+  /* ===== START / INPUT ===== */
   function startGame(){
     started=true; over=false; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore;
@@ -621,7 +694,10 @@ For high-density storage of relatively small and light items in tight quarters, 
     SMOKE.length=0; smokeTimer=0;
     phase='VERTICALS'; bufferTime=0; challengeQueued=false; verticalsPassed=0;
     nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS; verticalsEnabled=true;
-    startCard.classList.add('hidden'); gameOverCard.classList.add('hidden');
+
+    // hide splash, hide game over
+    splash.classList.add('hidden');
+    gameOverCard.classList.add('hidden');
   }
 
   async function handleTap(e){
@@ -632,12 +708,37 @@ For high-density storage of relatively small and light items in tight quarters, 
     if(!restartLocked) startGame();
   }
 
-  startCard.addEventListener('click', handleTap, {passive:false});
-  startCard.addEventListener('touchstart', handleTap, {passive:false});
-  startCard.addEventListener('pointerdown', handleTap, {passive:false});
-  startCard.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ handleTap(e); }}, {passive:false});
-  document.addEventListener('pointerdown', (e)=>{ if(e.target.closest('#gameOverCard')) return; if(e.target.closest('#muteBtn, #fsBtn')) return; handleTap(e); }, {passive:false, capture:true});
-  document.addEventListener('touchstart', (e)=>{ if(e.target.closest('#gameOverCard')) return; if(e.target.closest('#muteBtn, #fsBtn')) return; handleTap(e); }, {passive:false, capture:true});
+  // Splash buttons
+  document.getElementById('startBtn').addEventListener('click', handleTap, {passive:false});
+  document.getElementById('fsStartBtn').addEventListener('click', async (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    try{
+      const el=document.documentElement;
+      if(!document.fullscreenElement){ await (el.requestFullscreen?.()||el.webkitRequestFullscreen?.()||el.msRequestFullscreen?.()); }
+    }catch(_){}
+    handleTap(e);
+  }, {passive:false});
+
+  // Global inputs
+  document.addEventListener('pointerdown', (e)=>{
+    // If splash visible, only start if click/tap the splash (so users can still scroll the page around it)
+    if(!started && !splash.classList.contains('hidden')){
+      if(e.target.closest('#splash')) handleTap(e);
+      return;
+    }
+    if(e.target.closest('#gameOverCard')) return;
+    if(e.target.closest('#muteBtn, #fsBtn')) return;
+    handleTap(e);
+  }, {passive:false, capture:true});
+  document.addEventListener('touchstart', (e)=>{
+    if(!started && !splash.classList.contains('hidden')){
+      if(e.target.closest('#splash')) handleTap(e);
+      return;
+    }
+    if(e.target.closest('#gameOverCard')) return;
+    if(e.target.closest('#muteBtn, #fsBtn')) return;
+    handleTap(e);
+  }, {passive:false, capture:true});
   document.addEventListener('keydown', async (e)=>{ if(e.code==='Space'||e.key===' '||e.key==='Enter'){ await handleTap(e); } }, {passive:false});
 
   /* ===== BOOT ===== */
