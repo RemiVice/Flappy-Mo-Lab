@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — Local Assets (v1.56)</title>
+<title>ROCKET MO — Local Assets (v1.57)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -33,10 +33,10 @@
   .rot-overlay.show{ display:flex }
   .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
 
-  /* Overlay container (no pointer events; only the splash/card are clickable) */
+  /* Overlay container */
   .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
 
-  /* Title Splash — slightly more transparent so the bird & bg show through */
+  /* Title Splash */
   .splash{
     pointer-events:auto; width:min(720px, 94vw);
     background:
@@ -45,7 +45,7 @@
       rgba(20,24,28,.78);
     color:#fff; border-radius:18px; border:1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px);
     box-shadow:0 22px 60px rgba(0,0,0,.55); padding:26px 22px 18px; text-align:center;
-    margin-top:38px; /* give the bird a little space */
+    margin-top:38px;
   }
   .logo{ display:inline-grid; place-items:center; margin-bottom:6px; }
   .logo .word{
@@ -99,7 +99,7 @@
 
 <!-- Overlays -->
 <div class="overlay" id="overlay">
-  <!-- TITLE SPLASH (bird/logo remains visible behind this) -->
+  <!-- TITLE SPLASH -->
   <div id="splash" class="splash" aria-label="Title Screen">
     <div class="logo"><div class="word">ROCKET MO</div></div>
     <div class="cta">
@@ -136,7 +136,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.56';
+  const VERSION = '1.57';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ===== WORLD & PHYSICS ===== */
@@ -153,7 +153,7 @@
   const CHALLENGE_BARS = 3;
   const HORIZ_SPACING_X = Math.round(W * 0.25);
   const HORIZ_MARGIN_Y  = Math.round(H * 0.18);
-  const BUFFER_PIXELS   = Math.round(W * 0.06);   // keep at 0.06 as you prefer
+  const BUFFER_PIXELS   = Math.round(W * 0.06);
   const HORIZ_LEAD_PIXELS = Math.round(W * 0.08);
 
   /* ===== WRAP MARGINS ===== */
@@ -235,7 +235,7 @@
   }
   function rebuildStyles(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({name:cfg.name,bottom,top:topset,drawW,botImg:bot}); } }
 
-  /* ===== SYSTEM INFO (FULL) ===== */
+  /* ===== SYSTEM INFO ===== */
   const SYSTEMS = [
     { title: "EATNASTAK (DOUBLE FACE)",
       blurb: `When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system
@@ -473,31 +473,22 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   /* ===== BACKGROUND ===== */
   function drawBackground(){
-    if(bgImg){
-      ctx.drawImage(bgImg,0,0,W,H);
-      return;
-    }
-    /* Smooth colorful fallback (no more flat black) */
+    if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; }
     const g1=ctx.createLinearGradient(0,0,0,H);
-    g1.addColorStop(0,'#0f1116');
-    g1.addColorStop(1,'#1a1e26');
+    g1.addColorStop(0,'#0f1116'); g1.addColorStop(1,'#1a1e26');
     ctx.fillStyle=g1; ctx.fillRect(0,0,W,H);
-
     const g2=ctx.createRadialGradient(W*0.16,H*0.25,50, W*0.16,H*0.25,420);
-    g2.addColorStop(0,'rgba(255,210,90,0.18)');
-    g2.addColorStop(1,'rgba(255,210,90,0.0)');
-    ctx.fillStyle=g2; ctx.beginPath(); ctx.rect(0,0,W,H); ctx.fill();
-
+    g2.addColorStop(0,'rgba(255,210,90,0.18)'); g2.addColorStop(1,'rgba(255,210,90,0.0)');
+    ctx.fillStyle=g2; ctx.fillRect(0,0,W,H);
     const g3=ctx.createRadialGradient(W*0.85,H*0.35,50, W*0.85,H*0.35,520);
-    g3.addColorStop(0,'rgba(255,120,60,0.14)');
-    g3.addColorStop(1,'rgba(255,120,60,0.0)');
-    ctx.fillStyle=g3; ctx.beginPath(); ctx.rect(0,0,W,H); ctx.fill();
+    g3.addColorStop(0,'rgba(255,120,60,0.14)'); g3.addColorStop(1,'rgba(255,120,60,0.0)');
+    ctx.fillStyle=g3; ctx.fillRect(0,0,W,H);
   }
 
   /* ===== FLAME ===== */
   const flameCanvas=document.createElement('canvas'); flameCanvas.width=PIXEL_FLAME.gridW; flameCanvas.height=PIXEL_FLAME.gridH; const flameCtx=flameCanvas.getContext('2d',{alpha:true}); flameCtx.imageSmoothingEnabled=false;
   function drawPixelFlame(){
-    if(over) return; // keep on during splash + gameplay; stop on game over
+    if(over) return;
     const ang=bird.computeAngle(), fwdX=Math.cos(ang), fwdY=Math.sin(ang);
     const centerX=bird.x+bird.w/2, centerY=bird.yRender;
     const nozzleX=centerX - fwdX*(bird.w*PIXEL_FLAME.offsetFrac);
@@ -514,7 +505,9 @@ For high-density storage of relatively small and light items in tight quarters, 
       const hh=Math.max(1, Math.min(gh-1, half+jag));
       for(let y=-hh;y<=hh;y++){
         let col; const ay=Math.abs(y);
-        if(ay<=hh*0.35) col=PIXEL_FLAME.colHot; else if(ay<=hh*0.7) col=PIXEL_FLAME.colMid; else col=PIXEL_FLAME.colCool;
+        if(ay<=hh*0.35) col=PIXEL_FLAME.colHot;
+        else if(ay<=hh*0.7) col=PIXEL_FLAME.colMid;
+        else col=PIXEL_FLAME.colCool;
         if(Math.random()<0.09 && ay>hh*0.6) continue;
         flameCtx.fillStyle=col; flameCtx.fillRect(x, cy+y, 1, 1);
       }
@@ -537,7 +530,7 @@ For high-density storage of relatively small and light items in tight quarters, 
     smokeTimer += frameDt * SMOKE_RATE;
     while (smokeTimer >= 1) {
       smokeTimer--;
-      if (!over) { // emit during splash and gameplay
+      if (!over) {
         const ang = bird.computeAngle(), fwdX=Math.cos(ang), fwdY=Math.sin(ang);
         const nozzleX = bird.x + bird.w/2 - fwdX * (bird.w * PIXEL_FLAME.offsetFrac);
         const nozzleY = bird.yRender       - fwdY * (bird.w * PIXEL_FLAME.offsetFrac);
@@ -576,7 +569,7 @@ For high-density storage of relatively small and light items in tight quarters, 
       ctx.restore();
     },
     step(dt){ if(!started||over) return; this.v+=G*dt; if(this.v>MAX_FALL) this.v=MAX_FALL; this.y+=this.v*dt; },
-    flap(){ if(!started||over) return; this.v=LIFT_V0; playFlap(); },
+    flap(){ if(!started||over) return; this.v=LIFT_V0; woosh(); },
     reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; this.angle=0; }
   };
 
@@ -591,7 +584,6 @@ For high-density storage of relatively small and light items in tight quarters, 
       stepObstacles(STEP);
       bird.step(STEP);
 
-      // Vertical wrap during gameplay
       const topWrap   = -bird.h * TOP_OVERLAP_FRAC;
       const bottomWrap=  H + bird.h * BOTTOM_OVERLAP_FRAC;
       if (started && !over){
@@ -610,7 +602,6 @@ For high-density storage of relatively small and light items in tight quarters, 
     ctx.clearRect(0,0,W,H);
     drawBackground();
 
-    // render order: smoke behind bird, flame under sprite
     bird.yRender = bird.y + bird.v*leftover + (over?0:0.5*G*leftover*leftover);
     updateSmoke(frameDt); drawSmoke(frameDt);
     drawObstaclesInterpolated(leftover);
@@ -619,7 +610,6 @@ For high-density storage of relatively small and light items in tight quarters, 
 
     if(started && !over) collideAndScore(leftover);
 
-    // Version label only after start or on game over
     if(started || over){ ctx.fillStyle='rgba(120,120,120,0.95)'; ctx.font='700 8px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
     requestAnimationFrame(loop);
@@ -627,7 +617,7 @@ For high-density storage of relatively small and light items in tight quarters, 
 
   /* ===== GAME OVER ===== */
   function endGame(hitStyleIdx){
-    if(over) return; over=true; bird.v=0; playHit();
+    if(over) return; over=true; bird.v=0; crash();
     finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
     const box=document.getElementById('sysInfoBox'), imgEl=document.getElementById('sysImg'), tEl=document.getElementById('sysTitle'), bEl=document.getElementById('sysBlurb'), specsBox=document.getElementById('sysSpecsBox'), sEl=document.getElementById('sysSpecs'), lEl=document.getElementById('sysLinks');
 
@@ -659,14 +649,21 @@ For high-density storage of relatively small and light items in tight quarters, 
     restartLocked=true; setTimeout(()=>{ restartLocked=false; },1000);
   }
 
-  /* ===== START / INPUT (extra-redundant so Android starts) ===== */
+  /* ===== START / INPUT — strictly require real user gestures ===== */
+  let inputsArmed = false;
+  setTimeout(()=>{ inputsArmed = true; }, 250); // ignore any stray early events
+
+  function isRealUserEvent(e){
+    // Only start on trusted events after arming window
+    return inputsArmed && (!e || e.isTrusted !== false);
+  }
+
   function startGame(){
     started=true; over=false; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore;
     score=0; scoreEl.textContent="0";
     obstacles.length=0; bird.reset();
 
-    // small smoke burst at start
     for(let i=0;i<12;i++){ SMOKE.push({ x:bird.x+bird.w*0.35, y:bird.y, size:6+Math.random()*6, vX:-40+Math.random()*-40, vY:(Math.random()*40-20), life:0.5+Math.random()*0.5, age:0, shade:180+Math.floor(Math.random()*50) }); }
 
     phase='VERTICALS'; bufferTime=0; challengeQueued=false; verticalsPassed=0;
@@ -679,6 +676,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   }
 
   async function handleTap(e){
+    if(!isRealUserEvent(e)) return;
     e?.preventDefault?.(); e?.stopPropagation?.();
     await unlockAudio();
     if(!started){ startGame(); return; }
@@ -689,6 +687,7 @@ For high-density storage of relatively small and light items in tight quarters, 
   // Splash buttons
   startBtn.addEventListener('click', handleTap, {passive:false});
   fsStartBtn.addEventListener('click', async (e)=>{
+    if(!isRealUserEvent(e)) return;
     e.preventDefault(); e.stopPropagation();
     try{
       const el=document.documentElement;
@@ -697,14 +696,12 @@ For high-density storage of relatively small and light items in tight quarters, 
     handleTap(e);
   }, {passive:false});
 
-  // Redundant starters: canvas, overlay, splash, whole document (pointer & click)
+  // Starters (no global "click" to avoid synthetic auto-start)
   canvas.addEventListener('pointerdown', handleTap, {passive:false, capture:true});
   overlayEl.addEventListener('pointerdown', handleTap, {passive:false});
   splash.addEventListener('pointerdown', handleTap, {passive:false});
-  document.addEventListener('pointerdown', (e)=>{ if(e.target.closest('#muteBtn, #fsBtn, #gameOverCard')) return; handleTap(e); }, {passive:false, capture:true});
-  document.addEventListener('click', (e)=>{ if(e.target.closest('#muteBtn, #fsBtn, #gameOverCard')) return; if(!started) handleTap(e); }, {passive:false, capture:true});
   document.addEventListener('touchstart', (e)=>{ if(e.target.closest('#muteBtn, #fsBtn, #gameOverCard')) return; handleTap(e); }, {passive:false, capture:true});
-  document.addEventListener('keydown', async (e)=>{ if(e.code==='Space'||e.key===' '||e.key==='Enter'){ await handleTap(e); } }, {passive:false});
+  document.addEventListener('keydown', async (e)=>{ if(!inputsArmed) return; if(e.code==='Space'||e.key===' '||e.key==='Enter'){ await handleTap(e); } }, {passive:false});
 
   /* ===== BOOT ===== */
   requestAnimationFrame(loop);
