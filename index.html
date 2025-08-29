@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — Local Assets (v1.69)</title>
+<title>ROCKET MO — Local Assets (v1.70)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -40,7 +40,7 @@
       rgba(20,24,28,.78);
     color:#fff; border-radius:18px; border:1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px);
     box-shadow:0 22px 60px rgba(0,0,0,.55); padding:26px 22px 18px; text-align:center;
-    margin-top:52px; /* a little more space so the bird doesn't touch */
+    margin-top:52px;
   }
   .logo{ display:inline-grid; place-items:center; margin-bottom:6px; }
   .logo .word{
@@ -125,7 +125,7 @@
 
 <script>
 (() => {
-  const VERSION = '1.69';
+  const VERSION = '1.70';
   const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ---------- World ---------- */
@@ -315,7 +315,7 @@
   const flameCtx=flameCanvas.getContext('2d',{alpha:true}); flameCtx.imageSmoothingEnabled=false;
 
   function drawPixelFlame(){
-    if(state==='gameover') return; // hide on Game Over
+    if(state==='gameover') return;
     const ang=bird.computeAngle(), fwdX=Math.cos(ang), fwdY=Math.sin(ang);
     const centerX=bird.x+bird.w/2, centerY=bird.yRender;
     const nozzleX=centerX - fwdX*(bird.w*PIXEL_FLAME.offsetFrac);
@@ -401,7 +401,7 @@
 
     splash.classList.add('hidden');
     gameOverCard.classList.add('hidden');
-    bird.v = 0; // start calm; first tap/space will flap
+    bird.v = 0;
   }
 
   function endGame(hitStyleIdx){
@@ -464,7 +464,7 @@
     restartLocked = true; setTimeout(()=>{ restartLocked=false; }, 900);
   }
 
-  /* ---------- Centralized Input (no more conflicting handlers) ---------- */
+  /* ---------- Centralized Input ---------- */
   startBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); if(state==='title') startGame(); }, {passive:false});
   fsStartBtn.addEventListener('click', async (e)=>{
     e.preventDefault(); e.stopPropagation();
@@ -475,12 +475,8 @@
   let lastTap=0;
   function onPointerDown(e){
     const now=performance.now(); if(now-lastTap<140){ return; } lastTap=now;
-
-    // Ignore clicks on UI controls; their own handlers will run
     if(e.target.closest('#muteBtn, #fsBtn, #startBtn, #fsStartBtn, #gameOverCard')) return;
-
     e.preventDefault(); e.stopPropagation();
-
     if(state==='title'){ startGame(); return; }
     if(state==='playing'){ bird.flap(); return; }
     if(state==='gameover'){ if(!restartLocked) startGame(); return; }
@@ -497,12 +493,10 @@
   });
 
   /* ---------- Game core ---------- */
-  let nextSpawnPxInit = FIRST_VERTICAL_LEAD_PIXELS;
   function stepObstacles(dt){
     if(state!=='playing') return;
     nextSpawnPx -= SCROLL_PPS*dt;
     while(nextSpawnPx<=0){ spawnVerticalAt(W); nextSpawnPx += VERTICAL_X_GAP; }
-
     for(const o of obstacles){ o.x -= SCROLL_PPS*dt; }
     for(let i=obstacles.length-1;i>=0;i--) if(obstacles[i].x + obstacles[i].w <= 0) obstacles.splice(i,1);
   }
@@ -555,7 +549,6 @@
     ctx.clearRect(0,0,W,H);
     drawBackground();
 
-    // Bird render position (predictive only while playing)
     bird.yRender = bird.y + (state==='playing' ? bird.v*leftover + 0.5*G*leftover*leftover : 0);
 
     updateSmoke(frameDt);
@@ -566,7 +559,6 @@
 
     if(state==='playing') collideAndScore(leftover);
 
-    // version (bottom only)
     if(state!=='title'){ ctx.fillStyle='rgba(120,120,120,0.95)'; ctx.font='700 8px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
     requestAnimationFrame(loop);
@@ -593,8 +585,7 @@
     }catch(_){ rebuildStyles(); }
   })();
 
-  // Initialize title
-  let nextSpawnPx = FIRST_VERTICAL_LEAD_PIXELS;
+  // Title initially
   showTitle();
 
 })();
