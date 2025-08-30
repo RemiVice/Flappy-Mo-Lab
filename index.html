@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.92</title>
+<title>ROCKET MO — v1.93</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -22,6 +22,9 @@
 
   .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
   .badge{ background:rgba(20,24,28,.8); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
+  .badge.clickable{ pointer-events:auto; cursor:pointer; user-select:none }
+
+  .god-pill{ background:#ffc400; color:#1a1e26; border:1px solid rgba(0,0,0,.25) }
 
   .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
   .splash{
@@ -68,12 +71,15 @@
 
 <canvas id="game" width="1920" height="1080"></canvas>
 
+<!-- HUD -->
 <div class="hud">
   <div class="badge">Score: <span id="scoreVal">0</span></div>
-  <div class="badge">Last:  <span id="lastVal">0</span></div>
-  <div class="badge">Best:  <span id="bestVal">0</span></div>
+  <div id="lastBadge" class="badge clickable" title="Tap 10x to toggle GOD mode">Last: <span id="lastVal">0</span></div>
+  <div class="badge">Best: <span id="bestVal">0</span></div>
+  <div id="godPill" class="badge god-pill hidden">GOD</div>
 </div>
 
+<!-- Overlays -->
 <div class="overlay">
   <div id="splash" class="splash" tabindex="0" aria-label="Title Screen">
     <h1>ROCKET MO</h1>
@@ -96,6 +102,7 @@
   </div>
 </div>
 
+<!-- Landscape blocker -->
 <div id="rotBlock" class="rot-overlay">
   <div class="rot-box">
     <h2>Rotate your device</h2>
@@ -105,7 +112,7 @@
 
 <script>
 (() => {
-  const VERSION='1.92';
+  const VERSION='1.93';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -134,7 +141,7 @@
   const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
   const BIRD_INSET=8, GAP_FORGIVE=12;
 
-  /* Bird sprite (your sheet with plume) */
+  /* Bird sprite */
   const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12, BIRD_SPRITE_SCALE=1;
   const BIRD_ANCHOR_X_FRAC=0.58, BIRD_ANCHOR_Y_FRAC=0.50;
   let birdSprite=null, birdFallbackImg=null, bgImg=null;
@@ -163,7 +170,7 @@
     }
   };
 
-  /* Background helpers */
+  /* Background */
   function loadImageWithTimeout(src,timeout=6000){
     return new Promise((res)=>{ if(!src){ res(null); return; }
       const img=new Image(); img.referrerPolicy='no-referrer';
@@ -183,7 +190,7 @@
   function drawBackground(){ if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; } if(!bgCache) bgCache=buildBgCache(); ctx.drawImage(bgCache,0,0); }
   function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
-  /* Pipe art */
+  /* Pipe art build helpers */
   const PIPE_STYLES_CFG=[
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -223,7 +230,7 @@
     return c;
   }
   function makeHorizontalSprite(sty,len){
-    const body=sty.bottom.body; const thick=body.width; // full thickness
+    const body=sty.bottom.body; const thick=body.width;
     const tile=document.createElement('canvas'); tile.width=body.height; tile.height=thick;
     const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
     tg.save(); tg.translate(0, tile.height); tg.rotate(-Math.PI/2); tg.drawImage(body,0,0); tg.restore();
@@ -234,11 +241,10 @@
     return c;
   }
 
-  /* WORLD + strict cycle scheduler */
+  /* WORLD + scheduler */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  // horizontal parameters (with your buffer preference)
   const BUFFER_PIXELS=Math.round(W*0.06);
   const H_BETWEEN      =Math.round(W*0.25);
   const H_BAR_LEN      =Math.round(W*0.55);
@@ -251,7 +257,6 @@
 
   const AHEAD_LIMIT=Math.round(W*2.2);
 
-  // Modes
   const MODE_VERT='VERT', MODE_HSEG='HSEG';
   let spawnMode=MODE_VERT;
   let h1=0,h2=0,h3=0,hAfter=0;
@@ -274,80 +279,95 @@
     const sprite=makeHorizontalSprite(sty,H_BAR_LEN);
     obstacles.push({ type:'H', x:xPos, y:nextLane(), len:H_BAR_LEN, thick:sprite.height, styleIndex:idx, sprite, scored:false });
   }
-
   function purgeVerticalsInCorridor(x0,x1){
     for(let i=obstacles.length-1;i>=0;i--){
       const o=obstacles[i]; if(o.type!=='V') continue;
       if(o.x+o.w>x0 && o.x<x1){ obstacles.splice(i,1); }
     }
   }
-
   function ensureAhead(){
     const aheadTarget = worldScroll + W + AHEAD_LIMIT;
-    // Spawn one at a time per loop iteration to avoid batching
     while(xCursor < aheadTarget){
       if(spawnMode===MODE_VERT){
-        // Place one vertical
         scheduleVertical(xCursor);
         xCursor += VERTICAL_X_GAP;
         verticalCount++;
-
         if(verticalCount>=10){
-          // Compute the horizontal corridor and switch
           h1 = xCursor + BUFFER_PIXELS;
           h2 = h1 + H_BETWEEN;
           h3 = h2 + H_BETWEEN;
           hAfter = h3 + BUFFER_PIXELS;
-
-          // Purge any verticals that might have been scheduled inside this corridor
-          purgeVerticalsInCorridor(h1, hAfter);
-
+          purgeVerticalsInCorridor(h1,hAfter);
           spawnMode=MODE_HSEG;
           verticalCount=0;
         }
-        // Only one spawn per loop pass
         break;
       } else {
-        // Place exactly 3 horizontals, then jump xCursor to after-buffer
         scheduleHorizontal(h1);
         scheduleHorizontal(h2);
         scheduleHorizontal(h3);
         xCursor = hAfter;
         spawnMode=MODE_VERT;
-        // Only one segment scheduled per loop pass
         break;
       }
     }
   }
-
   function moveWorld(dt){ const dx=SCROLL_PPS*dt; worldScroll+=dx; for(const o of obstacles){ o.x-=dx; } xCursor-=dx; }
   function cleanupObstacles(){ for(let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; if((o.type==='V' && o.x+o.w<=0) || (o.type==='H' && o.x+o.len<=0)) obstacles.splice(i,1); } }
 
-  /* HUD + scoring */
+  /* HUD + scoring + GOD mode */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
+  const lastBadge=document.getElementById('lastBadge'); const godPill=document.getElementById('godPill');
   let score=0, lastScore=0; let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
+
+  let godMode=false;          // <-- GOD MODE FLAG
+  let godTapCount=0;          // how many taps on "Last" badge
+  const GOD_TAPS=10;
+
+  function setGodMode(on){
+    godMode=!!on;
+    godPill.classList.toggle('hidden', !godMode);
+  }
+
+  lastBadge.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    godTapCount++;
+    if(godTapCount>=GOD_TAPS){
+      setGodMode(!godMode);
+      godTapCount=0;
+    }
+  }, {passive:false});
 
   function collideAndScore(){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
+
     for(const o of obstacles){
       if(o.type==='V'){
         const overlapX=(bx2>o.x)&&(bx1<o.x+o.w);
         if(overlapX){
           const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
-          if(by1<safeTop || by2>safeBottom){ endGame(o.styleIndex); return true; }
+          if(by1<safeTop || by2>safeBottom){
+            if(!godMode){ endGame(o.styleIndex); return true; }
+          }
         }
         if(!o.scored && (o.x+o.w)<bx1){
-          o.scored=true; score++; scoreEl.textContent=score;
-          if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+          o.scored=true;
+          if(!godMode){
+            score++; scoreEl.textContent=score;
+            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+          }
         }
       } else {
         const rx1=o.x, rx2=o.x+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
         const overlap=(bx2>rx1)&&(bx1<rx2)&&(by2>ry1)&&(by1<ry2);
-        if(overlap){ endGame(o.styleIndex); return true; }
+        if(overlap){ if(!godMode){ endGame(o.styleIndex); return true; } }
         if(!o.scored && rx2<bx1){
-          o.scored=true; score++; scoreEl.textContent=score;
-          if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+          o.scored=true;
+          if(!godMode){
+            score++; scoreEl.textContent=score;
+            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+          }
         }
       }
     }
@@ -409,7 +429,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* System data (your full text preserved) */
+  /* Systems content (unchanged) */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -471,24 +491,21 @@
   }
 
   /* Main loop */
+  let state='title', restartLocked=false;
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
     accumulator+=frameDt;
     while(accumulator>=STEP){
       if(state==='playing'){
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
-
-        // vertical wrap
         const topWrap=-bird.h*TOP_OVERLAP_FRAC, bottomWrap=H+bird.h*BOTTOM_OVERLAP_FRAC;
         if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
         else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
-
         moveWorld(STEP); ensureAhead(); cleanupObstacles();
         bird.animTime+=STEP;
       }
       accumulator-=STEP;
     }
-
     ctx.clearRect(0,0,W,H); drawBackground();
     bird.yRender=bird.y;
     for(const o of obstacles){
@@ -498,7 +515,6 @@
     bird.draw();
     if(state!=='title') drawVersionTag();
     if(state==='playing') collideAndScore();
-
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
@@ -517,8 +533,17 @@
       Raw.bottoms=bottoms; Raw.tops=tops;
       (function rebuild(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({ name:cfg.name, bottom, top:topset, drawW }); } })();
     }catch(e){ console.error(e); }
-    showTitle();
+    showTitle(); // enter start screen
   })();
+
+  /* Input */
+  function globalPointerStart(e){
+    if(e && e.target && e.target.closest('#gameOverCard')) return;
+    if(state==='title'){ startGame(); return; }
+    if(state==='playing'){ e && e.preventDefault(); bird.flap(); return; }
+    if(state==='gameover' && !restartLocked){ startGame(); }
+  }
+  document.addEventListener('pointerdown', globalPointerStart, {passive:false, capture:true});
 
   addEventListener('error', ()=>{ try{ splash.classList.remove('hidden'); }catch(_){} }, {capture:true});
 
