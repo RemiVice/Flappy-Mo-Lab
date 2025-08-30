@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v2.04</title>
+<title>ROCKET MO — v2.06 (audio)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -75,6 +75,7 @@
   <div class="badge">Score: <span id="scoreVal">0</span></div>
   <div id="lastBadge" class="badge clickable" title="Tap 10x to toggle GOD mode">Last: <span id="lastVal">0</span></div>
   <div class="badge">Best: <span id="bestVal">0</span></div>
+  <div id="muteBadge" class="badge clickable" title="Toggle sound">🔊</div>
   <div id="godPill" class="badge god-pill hidden">GOD</div>
 </div>
 
@@ -111,7 +112,7 @@
 
 <script>
 (() => {
-  const VERSION='2.04';
+  const VERSION='2.06';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -124,8 +125,41 @@
   function checkOrientation(){ const rb=document.getElementById('rotBlock'); rb.classList.toggle('show', isMobile && innerWidth<innerHeight); }
   addEventListener('resize',checkOrientation,{passive:true}); checkOrientation();
 
-  /* Fixed-step physics */
-  let physicsHz=isMobile?90:60, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
+  /* ====== AUDIO SETUP ====== */
+  function audioExt(){
+    const a=new Audio();
+    const okOgg = a.canPlayType('audio/ogg; codecs="vorbis"') || a.canPlayType('audio/ogg; codecs="opus"');
+    return okOgg ? 'ogg' : 'mp3';
+  }
+  const _ext = audioExt();
+  const MUTE_KEY='flappyMoMute';
+  let muted = localStorage.getItem(MUTE_KEY)==='1';
+  const muteBadge=document.getElementById('muteBadge');
+  function updateMuteBadge(){ muteBadge.textContent = muted ? '🔇' : '🔊'; }
+  updateMuteBadge();
+  muteBadge.addEventListener('click', (e)=>{ e.stopPropagation(); muted=!muted; localStorage.setItem(MUTE_KEY, muted?'1':'0'); updateMuteBadge(); }, {passive:false});
+
+  function makeAudio(path){ const a=new Audio(path); a.preload='auto'; a.crossOrigin='anonymous'; return a; }
+  const SFX_BANK={
+    flap:    makeAudio(`assets/audio/sfx/sfx_flap.${_ext}`),
+    hit:     makeAudio(`assets/audio/sfx/sfx_hit.${_ext}`),
+    score:   makeAudio(`assets/audio/sfx/sfx_score.${_ext}`),
+    uiStart: makeAudio(`assets/audio/ui/ui_start.${_ext}`),
+    uiOver:  makeAudio(`assets/audio/ui/ui_gameover.${_ext}`)
+  };
+  function playSfx(id, vol=1){
+    if(muted) return;
+    const base=SFX_BANK[id]; if(!base) return;
+    try{
+      const a=base.cloneNode();
+      a.volume=Math.max(0,Math.min(1,vol));
+      a.play().catch(()=>{});
+      a.addEventListener('ended',()=>a.remove());
+    }catch(_){}
+  }
+
+  /* Fixed-step physics (120 Hz desktop) */
+  let physicsHz=isMobile?90:120, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
   const MAX_FRAME_DT=0.12;
 
   /* Game params */
@@ -151,10 +185,11 @@
     w:Math.round(H*0.069),
     h:Math.round(H*0.069),
     v:0, yRender:0, animTime:0,
-    flap(){ if(state!=='playing') return; this.v=LIFT_V0; },
-    reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; },
-    draw(){
-      const ang=Math.max(-0.45,Math.min(0.9,(this.v/600)*0.5));
+    yPrev:0, vPrev:0,
+    flap(){ if(state!=='playing') return; this.v=LIFT_V0; playSfx('flap',0.85); },
+    reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; this.yPrev=this.y; this.vPrev=this.v; },
+    draw(angleV){
+      const ang=Math.max(-0.45,Math.min(0.9,(angleV/600)*0.5));
       ctx.save(); ctx.translate(this.x+this.w/2, this.yRender); ctx.rotate(ang);
       if(birdSprite && birdSprite.complete && birdSprite.naturalWidth){
         const fw=Math.floor(birdSprite.naturalWidth/BIRD_SPRITE_FRAMES), fh=birdSprite.naturalHeight;
@@ -223,22 +258,26 @@
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  const BUFFER_PIXELS = Math.round(W*0.04);          // before/after trio
-  const H_GAP_TIME    = 0.90;                         // seconds between bars (time-based)
-  const H_GAP_MIN     = Math.round((H*0.069)*2.2);    // >= ~2.2x bird width
+  const BUFFER_PIXELS = Math.round(W*0.04);
+  const H_GAP_TIME    = 0.90;
+  const H_GAP_MIN     = Math.round((H*0.069)*2.2);
   const H_LANES       = [ Math.round(H*0.30), Math.round(H*0.52), Math.round(H*0.74) ];
-  // order is now RANDOM every trio (0=top,1=mid,2=bottom)
 
   let worldScroll=0;
   let xCursor=W+FIRST_VERTICAL_LEAD;
   let verticalCount=0;
 
   const AHEAD_LIMIT=Math.round(W*2.2);
+
   const MODE_VERT='VERT', MODE_HSEG='HSEG';
   let spawnMode=MODE_VERT;
   let reservedUntilX=0;
 
-  function maxVerticalRightEdge(minX){ let m=minX; for(const o of obstacles){ if(o.type==='V'){ const r=o.x+o.w; if(r>m) m=r; } } return m; }
+  function maxVerticalRightEdge(minX){
+    let m=minX;
+    for(const o of obstacles){ if(o.type==='V'){ const r=o.x+o.w; if(r>m) m=r; } }
+    return m;
+  }
 
   function scheduleVertical(xPos){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx], w=sty.drawW;
@@ -288,26 +327,17 @@
     }
   }
 
-  function randomTrioOrder(){
-    // Return three lane indices (0=top,1=mid,2=bottom). Repeats allowed.
-    return [randInt(0,2), randInt(0,2), randInt(0,2)];
-  }
+  function randomTrioOrder(){ return [randInt(0,2), randInt(0,2), randInt(0,2)]; }
 
   function spawnHorizontalTrio(){
     const startAfter = Math.max(xCursor, maxVerticalRightEdge(xCursor)) + BUFFER_PIXELS;
     const [s1,s2,s3]=pickDistinctStyles(3);
-
     const dynamicGap = Math.max(Math.round(SCROLL_PPS * H_GAP_TIME), H_GAP_MIN);
     const order = randomTrioOrder();
 
-    const x1 = startAfter;
-    const len1 = scheduleHorizontalSingle(x1, order[0], s1);
-
-    const x2 = x1 + len1 + dynamicGap;
-    const len2 = scheduleHorizontalSingle(x2, order[1], s2);
-
-    const x3 = x2 + len2 + dynamicGap;
-    const len3 = scheduleHorizontalSingle(x3, order[2], s3);
+    const x1 = startAfter; const len1 = scheduleHorizontalSingle(x1, order[0], s1);
+    const x2 = x1 + len1 + dynamicGap; const len2 = scheduleHorizontalSingle(x2, order[1], s2);
+    const x3 = x2 + len2 + dynamicGap; const len3 = scheduleHorizontalSingle(x3, order[2], s3);
 
     const after = x3 + len3 + BUFFER_PIXELS;
     reservedUntilX = after;
@@ -340,10 +370,16 @@
   const lastBadge=document.getElementById('lastBadge'); const godPill=document.getElementById('godPill');
   let score=0, lastScore=0; let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
 
-  // GOD toggle (progress persists; best stays in localStorage)
   let godMode=false, godTapCount=0; const GOD_TAPS=10;
   function setGodMode(on){ godMode=!!on; godPill.classList.toggle('hidden', !godMode); }
   lastBadge.addEventListener('click', (e)=>{ e.stopPropagation(); godTapCount++; if(godTapCount>=GOD_TAPS){ setGodMode(!godMode); godTapCount=0; } }, {passive:false});
+
+  function addScore(){
+    if(!godMode){
+      score++; scoreEl.textContent=score; playSfx('score',0.8);
+      if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+    }
+  }
 
   function collideAndScore(){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
@@ -355,27 +391,15 @@
         if(overlapX){
           const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
           if(by1<safeTop || by2>safeBottom){
-            if(!godMode){ endGame(o.styleIndex); return true; }
+            if(!godMode){ playSfx('hit',0.95); endGame(o.styleIndex); return true; }
           }
         }
-        if(!o.scored && (o.x+o.w)<bx1){
-          o.scored=true;
-          if(!godMode){
-            score++; scoreEl.textContent=score;
-            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
-          }
-        }
+        if(!o.scored && (o.x+o.w)<bx1){ o.scored=true; addScore(); }
       } else {
         const rx1=o.x, rx2=o.x+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
         const overlap=(bx2>rx1)&&(bx1<rx2)&&(by2>ry1)&&(by1<ry2);
-        if(overlap){ if(!godMode){ endGame(o.styleIndex); return true; } }
-        if(!o.scored && rx2<bx1){
-          o.scored=true;
-          if(!godMode){
-            score++; scoreEl.textContent=score;
-            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
-          }
-        }
+        if(overlap){ if(!godMode){ playSfx('hit',0.95); endGame(o.styleIndex); return true; } }
+        if(!o.scored && rx2<bx1){ o.scored=true; addScore(); }
       }
     }
     return false;
@@ -404,8 +428,9 @@
     obstacles.length=0; worldScroll=0;
     xCursor=W+FIRST_VERTICAL_LEAD; verticalCount=0; spawnMode=MODE_VERT; reservedUntilX=0;
 
-    ensureAhead();            // seed
+    ensureAhead();            // seed world
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
+    playSfx('uiStart',0.9);
   }
   function endGame(hitStyleIdx){
     if(state==='gameover') return;
@@ -413,6 +438,7 @@
     finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
     fillSystemPanel(hitStyleIdx);
     gameOverCard.classList.remove('hidden'); gameOverCard.scrollTop=0;
+    playSfx('uiOver',0.9);
     restartLocked=true; setTimeout(()=>{ restartLocked=false; },900);
   }
 
@@ -438,7 +464,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* System info content unchanged (omitted for brevity in comments, preserved in code) */
+  /* Systems content */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -506,30 +532,49 @@
     } else { sysInfoBox.style.display='none'; sysImg.style.display='none'; }
   }
 
-  /* Main loop */
+  /* Main loop with render interpolation */
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
     accumulator+=frameDt;
+
     while(accumulator>=STEP){
       if(state==='playing'){
+        bird.yPrev = bird.y; bird.vPrev = bird.v;  // save previous for interpolation
+
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
+
         const topWrap=-bird.h*TOP_OVERLAP_FRAC, bottomWrap=H+bird.h*BOTTOM_OVERLAP_FRAC;
-        if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
-        else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
+        if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; bird.yPrev=bird.y; }
+        else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; bird.yPrev=bird.y; }
+
         moveWorld(STEP); ensureAhead(); cleanupObstacles();
         bird.animTime+=STEP;
       }
       accumulator-=STEP;
     }
+
+    // Interpolation alpha in [0,1)
+    const alpha = (state==='playing') ? Math.min(1, accumulator/STEP) : 0;
+    const dxInterp = (state==='playing') ? (SCROLL_PPS * alpha * STEP) : 0;
+
+    // Render
     ctx.clearRect(0,0,W,H); drawBackground();
-    bird.yRender=bird.y;
+
+    // Smooth bird position/angle
+    bird.yRender = bird.yPrev + (bird.y - bird.yPrev) * alpha;
+    const vRender = bird.vPrev + (bird.v - bird.vPrev) * alpha;
+
+    // Draw obstacles with world interpolation offset
     for(const o of obstacles){
-      if(o.type==='V'){ if(o.sprite) ctx.drawImage(o.sprite,o.x,0,o.w,H); }
-      else { ctx.drawImage(o.sprite, o.x, o.y - o.thick/2); }
+      const drawX = o.x - dxInterp;
+      if(o.type==='V'){ if(o.sprite) ctx.drawImage(o.sprite, drawX, 0, o.w, H); }
+      else { ctx.drawImage(o.sprite, drawX, o.y - o.thick/2); }
     }
-    bird.draw();
+
+    bird.draw(vRender);
     if(state!=='title') drawVersionTag();
     if(state==='playing') collideAndScore();
+
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
@@ -537,28 +582,29 @@
   /* Boot assets & enter title */
   (async ()=>{
     try{
+      const PIPE_STYLES_CFG_LOCAL = PIPE_STYLES_CFG;
       const [sprite,fallback,bg,...rest]=await Promise.all([
         loadImageWithTimeout("assets/bird-sprite.png"),
         loadImageWithTimeout("assets/bird.png"),
         loadImageWithTimeout("assets/bg.png"),
-        ...PIPE_STYLES_CFG.flatMap(s=>[loadImageWithTimeout(s.bottom.url), loadImageWithTimeout(s.top.url)])
+        ...PIPE_STYLES_CFG_LOCAL.flatMap(s=>[loadImageWithTimeout(s.bottom.url), loadImageWithTimeout(s.top.url)])
       ]);
       birdSprite=sprite||null; birdFallbackImg=(!birdSprite && fallback)?fallback:null; bgImg=bg||null;
 
       const bottoms=[], tops=[];
-      for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=rest[i*2]||null; tops[i]=rest[i*2+1]||null; }
+      for(let i=0;i<PIPE_STYLES_CFG_LOCAL.length;i++){ bottoms[i]=rest[i*2]||null; tops[i]=rest[i*2+1]||null; }
       Raw.bottoms=bottoms; Raw.tops=tops;
 
       Styles.length=0;
-      for(let i=0;i<PIPE_STYLES_CFG.length;i++){
-        const cfg=PIPE_STYLES_CFG[i];
+      for(let i=0;i<PIPE_STYLES_CFG_LOCAL.length;i++){
+        const cfg=PIPE_STYLES_CFG_LOCAL[i];
         const bot=Raw.bottoms[i], top=Raw.tops[i];
         const drawW=Math.round(PIPE_W*(cfg.scale||1));
 
         const bottomSet=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom);
         const topSet=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom);
 
-        // Horizontal single: WHOLE bottom PNG, rotated 90° left, thickness = drawW
+        // Horizontal single: whole bottom PNG, rotated 90° left, thickness = drawW
         let hTile;
         if(bot && bot.naturalWidth){
           const base=makeScaledCanvas(bot, drawW, Math.round(bot.naturalHeight*(drawW/bot.naturalWidth)));
@@ -575,7 +621,7 @@
         Styles.push({ name:'PH', bottom:{cap:ph,body:ph}, top:{cap:ph,body:ph}, drawW, hTile:makeScaledCanvas(null,drawW,drawW) });
       }
     }catch(e){ console.error(e); }
-    showTitle();
+    showTitle(); // enter start screen
   })();
 
   addEventListener('error', ()=>{ try{ document.getElementById('splash').classList.remove('hidden'); }catch(_){} }, {capture:true});
