@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v2.06 (audio)</title>
+<title>ROCKET MO — v2.07 (audio fallback)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -112,7 +112,7 @@
 
 <script>
 (() => {
-  const VERSION='2.06';
+  const VERSION='2.07';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -125,13 +125,7 @@
   function checkOrientation(){ const rb=document.getElementById('rotBlock'); rb.classList.toggle('show', isMobile && innerWidth<innerHeight); }
   addEventListener('resize',checkOrientation,{passive:true}); checkOrientation();
 
-  /* ====== AUDIO SETUP ====== */
-  function audioExt(){
-    const a=new Audio();
-    const okOgg = a.canPlayType('audio/ogg; codecs="vorbis"') || a.canPlayType('audio/ogg; codecs="opus"');
-    return okOgg ? 'ogg' : 'mp3';
-  }
-  const _ext = audioExt();
+  /* ====== AUDIO (multi-source, mp3/ogg, multi-path) ====== */
   const MUTE_KEY='flappyMoMute';
   let muted = localStorage.getItem(MUTE_KEY)==='1';
   const muteBadge=document.getElementById('muteBadge');
@@ -139,19 +133,36 @@
   updateMuteBadge();
   muteBadge.addEventListener('click', (e)=>{ e.stopPropagation(); muted=!muted; localStorage.setItem(MUTE_KEY, muted?'1':'0'); updateMuteBadge(); }, {passive:false});
 
-  function makeAudio(path){ const a=new Audio(path); a.preload='auto'; a.crossOrigin='anonymous'; return a; }
+  function createMultiAudio(baseId, folder){ // folder: 'sfx' | 'ui'
+    const el=document.createElement('audio');
+    el.preload='auto'; el.crossOrigin='anonymous';
+    const paths=[
+      `assets/audio/${folder}/${baseId}.ogg`,
+      `assets/audio/${folder}/${baseId}.mp3`,
+      // lenient fallback if user dropped files straight in /assets
+      `assets/${baseId}.ogg`,
+      `assets/${baseId}.mp3`,
+    ];
+    for(const p of paths){
+      const s=document.createElement('source');
+      s.src=p;
+      s.type=p.endsWith('.mp3')?'audio/mpeg':'audio/ogg';
+      el.appendChild(s);
+    }
+    return el;
+  }
   const SFX_BANK={
-    flap:    makeAudio(`assets/audio/sfx/sfx_flap.${_ext}`),
-    hit:     makeAudio(`assets/audio/sfx/sfx_hit.${_ext}`),
-    score:   makeAudio(`assets/audio/sfx/sfx_score.${_ext}`),
-    uiStart: makeAudio(`assets/audio/ui/ui_start.${_ext}`),
-    uiOver:  makeAudio(`assets/audio/ui/ui_gameover.${_ext}`)
+    flap:    createMultiAudio('sfx_flap','sfx'),
+    hit:     createMultiAudio('sfx_hit','sfx'),
+    score:   createMultiAudio('sfx_score','sfx'),
+    uiStart: createMultiAudio('ui_start','ui'),
+    uiOver:  createMultiAudio('ui_gameover','ui'),
   };
   function playSfx(id, vol=1){
     if(muted) return;
     const base=SFX_BANK[id]; if(!base) return;
     try{
-      const a=base.cloneNode();
+      const a=base.cloneNode(true); // deep clone to keep <source> fallbacks
       a.volume=Math.max(0,Math.min(1,vol));
       a.play().catch(()=>{});
       a.addEventListener('ended',()=>a.remove());
@@ -464,7 +475,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* Systems content */
+  /* Systems content (unchanged) */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -539,7 +550,7 @@
 
     while(accumulator>=STEP){
       if(state==='playing'){
-        bird.yPrev = bird.y; bird.vPrev = bird.v;  // save previous for interpolation
+        bird.yPrev = bird.y; bird.vPrev = bird.v;
 
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
 
@@ -553,18 +564,14 @@
       accumulator-=STEP;
     }
 
-    // Interpolation alpha in [0,1)
     const alpha = (state==='playing') ? Math.min(1, accumulator/STEP) : 0;
     const dxInterp = (state==='playing') ? (SCROLL_PPS * alpha * STEP) : 0;
 
-    // Render
     ctx.clearRect(0,0,W,H); drawBackground();
 
-    // Smooth bird position/angle
     bird.yRender = bird.yPrev + (bird.y - bird.yPrev) * alpha;
     const vRender = bird.vPrev + (bird.v - bird.vPrev) * alpha;
 
-    // Draw obstacles with world interpolation offset
     for(const o of obstacles){
       const drawX = o.x - dxInterp;
       if(o.type==='V'){ if(o.sprite) ctx.drawImage(o.sprite, drawX, 0, o.w, H); }
@@ -630,3 +637,4 @@
 </script>
 </body>
 </html>
+
