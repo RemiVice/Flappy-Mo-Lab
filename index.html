@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.79</title>
+<title>ROCKET MO — v1.80</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -10,8 +10,6 @@
   * { box-sizing:border-box }
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent }
-
-  /* Canvas */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -20,14 +18,9 @@
     background:#000; touch-action:none; image-rendering:auto;
     border-radius:14px; border:1px solid rgba(255,255,255,.08);
   }
-
-  /* HUD */
   .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
   .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
-
-  /* Overlays */
   .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
-
   .splash{
     pointer-events:auto; width:min(720px,94vw);
     background:rgba(20,24,28,.86); color:#fff; border-radius:18px;
@@ -38,7 +31,6 @@
     background: linear-gradient(180deg,#ffd54a 0%,#fff7c5 35%,#ff7a3a 100%);
     -webkit-background-clip:text; background-clip:text; color:transparent; }
   .splash .hint{ opacity:.9; font-size:12px }
-
   .card{
     pointer-events:auto; color:#fff; background:var(--glass);
     border:1px solid rgba(255,255,255,.08); border-radius:14px;
@@ -49,13 +41,10 @@
   .card h1{ margin:0 0 8px; font-size:clamp(20px,4vw,34px); font-weight:800; color:#fff }
   .card p{ margin:0; font-size:clamp(13px,3.2vw,16px); color:#fff }
   .hidden{ display:none }
-
   #sysImg{ max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px auto; display:none; opacity:0; transition:opacity .25s ease; }
   #sysSpecs th, #sysSpecs td{ border-bottom:1px solid rgba(255,255,255,.25); padding:6px; text-align:left; color:#fff; }
   #sysSpecs th{ font-weight:800; }
   #sysSpecs td:first-child{ font-weight:600; }
-
-  /* Rotation message (mobile) */
   .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:9; pointer-events:none; }
   .rot-overlay.show{ display:flex }
   .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
@@ -65,14 +54,12 @@
 
 <canvas id="game" width="1920" height="1080"></canvas>
 
-<!-- HUD -->
 <div class="hud">
   <div class="badge">Score: <span id="scoreVal">0</span></div>
   <div class="badge">Last:  <span id="lastVal">0</span></div>
   <div class="badge">Best:  <span id="bestVal">0</span></div>
 </div>
 
-<!-- Title + Game Over -->
 <div class="overlay">
   <div id="splash" class="splash" tabindex="0" aria-label="Title Screen">
     <h1>ROCKET MO</h1>
@@ -94,7 +81,6 @@
   </div>
 </div>
 
-<!-- Orientation -->
 <div id="rotBlock" class="rot-overlay">
   <div class="rot-box">
     <h2>Rotate your device</h2>
@@ -104,20 +90,18 @@
 
 <script>
 (() => {
-  const VERSION='1.79';
+  const VERSION='1.80';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-  /* ---------- Canvas ---------- */
   const W=1920,H=1080;
   const canvas=document.getElementById('game');
   const ctx=canvas.getContext('2d',{alpha:false});
   ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
 
   function fitCSS(){
-    const vw=innerWidth;
-    const vh=Math.round(window.visualViewport?visualViewport.height:innerHeight);
+    const vw=innerWidth, vh=Math.round(window.visualViewport?visualViewport.height:innerHeight);
     const s=Math.min(vw/W, vh/H);
-    const snapped=Math.round(s*100)/100; // snap to reduce resample jitter
+    const snapped=Math.round(s*100)/100;
     canvas.style.transform=`translate(-50%,-50%) scale(${snapped})`;
   }
   addEventListener('resize',fitCSS,{passive:true});
@@ -130,35 +114,25 @@
   }
   addEventListener('resize',checkOrientation,{passive:true}); checkOrientation();
 
-  /* ---------- Timing ---------- */
   let physicsHz=isMobile?90:60;
   let STEP=1/physicsHz,accumulator=0,lastTs=performance.now();
   const MAX_FRAME_DT=0.12;
 
-  /* ---------- World ---------- */
   const SPEED_MULT=isMobile?1.40:1.50;
   const G=4800*SPEED_MULT, LIFT_V0=-1250*SPEED_MULT, MAX_FALL=2200*SPEED_MULT;
-  const baseScroll = isMobile?480:440;
-  const SCROLL_PPS = baseScroll*SPEED_MULT;
+  const baseScroll=isMobile?480:440;
+  const SCROLL_PPS=baseScroll*SPEED_MULT;
 
-  // Vertical pipes spacing + first spawn lead
-  const VERTICAL_X_GAP = Math.round(SCROLL_PPS*1.8);
-  const FIRST_VERTICAL_LEAD = VERTICAL_X_GAP;
+  const VERTICAL_X_GAP=Math.round(SCROLL_PPS*1.8);
+  const FIRST_VERTICAL_LEAD=VERTICAL_X_GAP;
 
-  // Gaps/pipe sizes
   const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
-
-  // Wrapping leniency
   const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
-
-  // Bird collision forgiveness
   const BIRD_INSET=8, GAP_FORGIVE=12;
 
-  /* ---------- Bird sprite (logo + flame) ---------- */
   const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12;
-  const BIRD_SPRITE_SCALE=1.55;   // width scale to show flame tail
-  const BIRD_ANCHOR_X_FRAC=0.58;  // visual center inside sprite frame
-  const BIRD_ANCHOR_Y_FRAC=0.50;
+  const BIRD_SPRITE_SCALE=1.55;
+  const BIRD_ANCHOR_X_FRAC=0.58, BIRD_ANCHOR_Y_FRAC=0.50;
 
   let birdSprite=null, birdFallbackImg=null, bgImg=null;
 
@@ -167,42 +141,28 @@
     y:Math.round(H*0.5),
     w:Math.round(H*0.069),
     h:Math.round(H*0.069),
-    v:0,
-    yRender:0,
-    animTime:0,
-    angle:0,
-    computeAngle(){ this.angle=Math.max(-0.45, Math.min(0.9, (this.v/600)*0.5)); return this.angle; },
+    v:0, yRender:0, animTime:0, angle:0,
+    computeAngle(){ this.angle=Math.max(-0.45, Math.min(0.9,(this.v/600)*0.5)); return this.angle; },
     flap(){ if(state!=='playing') return; this.v=LIFT_V0; },
     reset(){ this.y=Math.round(H*0.5); this.v=0; this.animTime=0; this.angle=0; },
     draw(){
       const ang=this.computeAngle();
-      ctx.save();
-      ctx.translate(this.x+this.w/2, this.yRender);
-      ctx.rotate(ang);
-
+      ctx.save(); ctx.translate(this.x+this.w/2, this.yRender); ctx.rotate(ang);
       if(birdSprite && birdSprite.complete && birdSprite.naturalWidth){
         const frameW=Math.floor(birdSprite.naturalWidth/BIRD_SPRITE_FRAMES);
         const frameH=birdSprite.naturalHeight;
         const idx=Math.floor(this.animTime*BIRD_SPRITE_FPS)%BIRD_SPRITE_FRAMES;
         const sx=idx*frameW;
-
-        /* Preserve aspect ratio of sprite frame */
-        const aspect = frameW / frameH;
-        const drawH  = this.h;                          // fit by height (keeps gameplay scale)
-        const drawW  = drawH * aspect * BIRD_SPRITE_SCALE;
-
+        const aspect=frameW/frameH, drawH=this.h, drawW=drawH*aspect*BIRD_SPRITE_SCALE;
         const ax=drawW*BIRD_ANCHOR_X_FRAC, ay=drawH*BIRD_ANCHOR_Y_FRAC;
         ctx.drawImage(birdSprite, sx,0,frameW,frameH, -ax,-ay, drawW,drawH);
       } else if(birdFallbackImg && birdFallbackImg.complete && birdFallbackImg.naturalWidth){
         ctx.drawImage(birdFallbackImg, -this.w/2, -this.h/2, this.w, this.h);
-      } else {
-        ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h);
-      }
+      } else { ctx.fillStyle="#fff"; ctx.fillRect(-this.w/2, -this.h/2, this.w, this.h); }
       ctx.restore();
     }
   };
 
-  /* ---------- Background (optional image) ---------- */
   function loadImageWithTimeout(src,timeout=6000){
     return new Promise((res)=>{ if(!src){ res(null); return; }
       const img=new Image(); img.referrerPolicy='no-referrer';
@@ -223,20 +183,19 @@
   }
   function drawBackground(){ if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; } if(!bgCache) bgCache=buildBgCache(); ctx.drawImage(bgCache,0,0); }
 
-  /* ---------- Pipes rendering helpers ---------- */
-  const PIPE_STYLES_CFG = [
-    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
-    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"},    top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
+  const PIPE_STYLES_CFG=[
+    { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 4", bottom:{url:"assets/pipe4-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe4-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 5", bottom:{url:"assets/pipe5-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe5-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 6", bottom:{url:"assets/pipe6-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe6-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 7", bottom:{url:"assets/pipe7-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe7-top.png", capPx:64, capFrom:"bottom"} },
+    { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
   ];
   const Raw={ bottoms:[], tops:[] }, Styles=[];
   function makeScaledCanvas(img,w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h);} return c; }
-  function buildCapBodyPx(img, drawW, capPxSrc, capFrom="top"){
+  function buildCapBodyPx(img,drawW,capPxSrc,capFrom="top"){
     if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.imageSmoothingEnabled=true; g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return {cap:ph, body:ph}; }
     const scale=drawW/(img.naturalWidth||img.width);
     const scaledH=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
@@ -250,67 +209,51 @@
     else { cg.drawImage(full,0,scaledH-cap.height,drawW,cap.height,0,0,drawW,cap.height); bg.drawImage(full,0,0,drawW,body.height,0,0,drawW,body.height); }
     return { cap, body };
   }
-  function rebuildStyles(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({ name:cfg.name, bottom, top:topset, drawW, botImg:bot }); } }
+  function rebuildStyles(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({ name:cfg.name, bottom, top:topset, drawW }); } }
 
-  function drawBodyTiled(g, tile, x, yStart, totalH, w, mode){
+  function drawBodyTiled(g,tile,x,yStart,totalH,w,mode){
     const th=tile.height; if(totalH<=0||th<=0) return;
     if(mode==="topUp"){ let y=totalH-th; while(y>=0){ g.drawImage(tile,x,y,w,th); y-=th; } const rem=totalH%th; if(rem>0) g.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem); }
     else { let y=yStart, end=yStart+totalH; while(y+th<=end){ g.drawImage(tile,x,y,w,th); y+=th; } const left=end-y; if(left>0) g.drawImage(tile,0,0,tile.width,left,x,y,w,left); }
   }
-  function makeVerticalSprite(sty, top, gap, w){
+  function makeVerticalSprite(sty,top,gap,w){
     const c=document.createElement('canvas'); c.width=w; c.height=H; const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    // top
-    if(top>0){ const cap=sty.top.cap, body=sty.top.body; const capH=Math.min(cap.height,top), bodyH=top-capH; if(bodyH>0) drawBodyTiled(g, body, 0, 0, bodyH, w, "topUp"); g.drawImage(cap,0,top-capH,w,capH); }
-    // bottom
+    if(top>0){ const cap=sty.top.cap, body=sty.top.body; const capH=Math.min(cap.height,top), bodyH=top-capH; if(bodyH>0) drawBodyTiled(g,body,0,0,bodyH,w,"topUp"); g.drawImage(cap,0,top-capH,w,capH); }
     const by=top+gap, bottomH=H-by;
-    if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH); const remain=bottomH-capH; if(remain>0) drawBodyTiled(g, body, 0, by+capH, remain, w, "bottomDown"); }
+    if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH); const remain=bottomH-capH; if(remain>0) drawBodyTiled(g,body,0,by+capH,remain,w,"bottomDown"); }
     return c;
   }
 
-  // Horizontal using full *bottom* image, rotated left.
-  // IMPORTANT: thickness == sty.drawW to preserve native pipe aspect (no squashing).
-  function makeHorizontalSprite(sty, len){
-    const src=sty.botImg;
-    const thick = sty.drawW;           // visual thickness equals vertical pipe width
+  /* -------- FIXED: rotate the BODY tile (not the raw bottom image) -------- */
+  function makeHorizontalSprite(sty,len){
+    const body=sty.bottom.body;                 // seamless vertical body (width == drawW)
+    const thick=body.width;                     // desired thickness for horizontal
+    const tile=document.createElement('canvas');
+    tile.width=body.height;                     // after rotation, this is length per tile
+    tile.height=thick;                          // exact thickness (no scaling)
+    const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
+    // Rotate -90° and paint the body tile
+    tg.save();
+    tg.translate(0, tile.height);               // draw with left-bottom as origin
+    tg.rotate(-Math.PI/2);
+    tg.drawImage(body, 0,0);                    // no scaling -> no squashing
+    tg.restore();
+
+    // Build final bar sprite by tiling across 'len'
     const c=document.createElement('canvas'); c.width=len; c.height=thick;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-
-    if(src && (src.naturalWidth||src.width)){
-      const sw=src.naturalWidth||src.width, sh=src.naturalHeight||src.height;
-      // Scale uniformly so rotated image height == thick
-      const scale=thick/sw;
-
-      // Rotate entire original bottom image -90°, then tile across
-      const tile=document.createElement('canvas');
-      tile.width=Math.max(1,Math.round(sh*scale));   // length per tile
-      tile.height=Math.max(1,Math.round(sw*scale));  // == thick
-      const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
-
-      tg.save();
-      tg.translate(0, tile.height);   // rotate about left-bottom
-      tg.rotate(-Math.PI/2);
-      tg.drawImage(src, 0,0, sw,sh, 0,0, sw, tile.height); // sw -> tile.height == thick
-      tg.restore();
-
-      // Tile horizontally to fill 'len' exactly (no stretch)
-      let x=0;
-      while(x+tile.width<=len){ g.drawImage(tile,x,0); x+=tile.width; }
-      const rem=len-x;
-      if(rem>0){ g.drawImage(tile,0,0, rem, tile.height, x,0, rem, tile.height); }
-    } else {
-      g.fillStyle='#3a9b6a'; g.fillRect(0,0,len,thick);
-    }
+    let x=0;
+    while(x+tile.width<=len){ g.drawImage(tile,x,0); x+=tile.width; }
+    const rem=len-x; if(rem>0) g.drawImage(tile,0,0,rem,tile.height,x,0,rem,tile.height);
     return c;
   }
 
-  /* ---------- Obstacles & spawner ---------- */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  // Your chosen buffers
-  const H_BUFFER  = Math.round(W*0.06); // before/after horizontal set
-  const H_BETWEEN = Math.round(W*0.25); // between horizontals within the set
-  const H_BAR_LEN = Math.round(W*0.55); // length along X (no scaling in draw)
+  const H_BUFFER=Math.round(W*0.06);
+  const H_BETWEEN=Math.round(W*0.25);
+  const H_BAR_LEN=Math.round(W*0.55);
 
   function spawnVerticalAt(xPos){
     if(!Styles.length) return;
@@ -324,29 +267,26 @@
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx], w=sty.drawW;
     obstacles.push({ type:'V', x:xPos, top, gap, w, styleIndex:idx, scored:false, sprite:makeVerticalSprite(sty,top,gap,w) });
   }
-
   function spawnOneHorizontal(){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx];
-    const sprite=makeHorizontalSprite(sty, H_BAR_LEN);
-    const thick = sprite.height;    // exact draw thickness from sprite (sty.drawW)
+    const sprite=makeHorizontalSprite(sty,H_BAR_LEN);
+    const thick=sprite.height;
     const margin=Math.round(H*0.12);
-    const yMid=randInt(margin + thick/2, H - (margin + thick/2)); // keep fully on-screen
+    const yMid=randInt(margin + thick/2, H - (margin + thick/2));
     obstacles.push({ type:'H', x:W, y:yMid, len:H_BAR_LEN, thick, styleIndex:idx, sprite, scored:false });
   }
 
-  // Pattern state: 10 vertical, then 3 horizontals
   let patternMode='VERT', vertSpawned=0, hLeft=0, nextSpawnPx=FIRST_VERTICAL_LEAD;
-
   function stepSpawner(dt){
-    nextSpawnPx -= SCROLL_PPS*dt;
+    nextSpawnPx-=SCROLL_PPS*dt;
     while(nextSpawnPx<=0){
       if(patternMode==='VERT'){
         spawnVerticalAt(W);
-        vertSpawned++; nextSpawnPx += VERTICAL_X_GAP;
-        if(vertSpawned>=10){ patternMode='HSET'; hLeft=3; nextSpawnPx += H_BUFFER; }
-      } else {
+        vertSpawned++; nextSpawnPx+=VERTICAL_X_GAP;
+        if(vertSpawned>=10){ patternMode='HSET'; hLeft=3; nextSpawnPx+=H_BUFFER; }
+      }else{
         spawnOneHorizontal(); hLeft--;
-        nextSpawnPx += (hLeft>0 ? H_BETWEEN : H_BUFFER);
+        nextSpawnPx+=(hLeft>0?H_BETWEEN:H_BUFFER);
         if(hLeft<=0){ patternMode='VERT'; vertSpawned=0; }
       }
     }
@@ -359,7 +299,6 @@
         if(o.sprite) ctx.drawImage(o.sprite,xR,0,o.w,H);
       } else {
         const xR=(state==='playing')?(o.x - SCROLL_PPS*leftover):o.x;
-        // sprite is already len x thick; draw 1:1 (no scale)
         ctx.drawImage(o.sprite, xR, o.y - o.thick/2);
       }
     }
@@ -371,7 +310,6 @@
     }
   }
 
-  /* ---------- Score & collisions ---------- */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
   let score=0, lastScore=0;
   let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
@@ -379,7 +317,6 @@
   function collideAndScore(leftover){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
-
     for(const o of obstacles){
       if(o.type==='V'){
         const xR=o.x - SCROLL_PPS*leftover;
@@ -405,81 +342,55 @@
     return false;
   }
 
-  /* ---------- UI / flow (robust start) ---------- */
   const splash=document.getElementById('splash');
   const gameOverCard=document.getElementById('gameOverCard');
   const finalScoreP=document.getElementById('finalScoreP');
 
-  let state='title';
-  let restartLocked=false;
+  let state='title', restartLocked=false;
 
-  function showTitle(){
-    state='title';
-    restartLocked=false;
-    splash.classList.remove('hidden');
-    gameOverCard.classList.add('hidden');
-    score=0; scoreEl.textContent='0';
-    bird.reset();
+  function showTitle(){ state='title'; restartLocked=false;
+    splash.classList.remove('hidden'); gameOverCard.classList.add('hidden');
+    score=0; scoreEl.textContent='0'; bird.reset();
   }
-
   function startGame(){
     if(state==='playing') return;
-    state='playing';
-    restartLocked=false;
-    lastScore=score; lastEl.textContent=lastScore;
-    score=0; scoreEl.textContent='0';
-    obstacles.length=0;
-    patternMode='VERT'; vertSpawned=0; hLeft=0;
-    nextSpawnPx=FIRST_VERTICAL_LEAD;
-    bird.reset();
-    splash.classList.add('hidden');
-    gameOverCard.classList.add('hidden');
+    state='playing'; restartLocked=false;
+    lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
+    obstacles.length=0; patternMode='VERT'; vertSpawned=0; hLeft=0; nextSpawnPx=FIRST_VERTICAL_LEAD;
+    bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
-
   function endGame(hitStyleIdx){
     if(state==='gameover') return;
-    state='gameover';
-    bird.v=0;
+    state='gameover'; bird.v=0;
     finalScoreP.textContent=`Score: ${score} • Best: ${best}`;
     fillSystemPanel(hitStyleIdx);
-    gameOverCard.classList.remove('hidden');
-    gameOverCard.scrollTop=0;
-    restartLocked=true;
-    setTimeout(()=>{ restartLocked=false; }, 900);
+    gameOverCard.classList.remove('hidden'); gameOverCard.scrollTop=0;
+    restartLocked=true; setTimeout(()=>{ restartLocked=false; },900);
   }
 
-  // Taps/clicks anywhere except inside the Game Over card
   function globalPointerStart(e){
-    if(e.target.closest('#gameOverCard')) return; // allow scroll inside card
+    if(e.target.closest('#gameOverCard')) return;
     if(state==='title'){ startGame(); return; }
     if(state==='playing'){ e.preventDefault(); bird.flap(); return; }
     if(state==='gameover' && !restartLocked){ startGame(); }
   }
-  document.addEventListener('pointerdown', globalPointerStart, { passive:false, capture:true });
-
-  // Make the splash itself a guaranteed start target
-  splash.addEventListener('click', ()=>{ if(state!=='playing') startGame(); }, { passive:true });
-  splash.addEventListener('keydown', (e)=>{
-    if(e.key==='Enter' || e.code==='Space' || e.key===' '){ e.preventDefault(); startGame(); }
-  });
-  splash.setAttribute('tabindex','0'); // focusable for keyboard start
-
-  // Keyboard anywhere
-  document.addEventListener('keydown', (e)=>{
+  document.addEventListener('pointerdown', globalPointerStart, {passive:false, capture:true});
+  splash.addEventListener('click', ()=>{ if(state!=='playing') startGame(); }, {passive:true});
+  splash.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.code==='Space'||e.key===' '){ e.preventDefault(); startGame(); }});
+  splash.setAttribute('tabindex','0');
+  document.addEventListener('keydown',(e)=>{
     if(e.repeat) return;
-    if(e.code==='Space' || e.key===' '){
+    if(e.code==='Space'||e.key===' '){
       if(state==='title') startGame();
       else if(state==='gameover'){ if(!restartLocked) startGame(); }
       else bird.flap();
       e.preventDefault();
     }
     if(e.key==='Enter'){
-      if(state==='title') startGame();
-      else if(state==='gameover' && !restartLocked) startGame();
+      if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame();
     }
   });
 
-  /* ---------- Systems panel data (your content) ---------- */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -488,22 +399,22 @@
       blurb:"Montel's patented SmartShelf is the most versatile storage shelving system available today. This innovative 4-post shelving offers complete flexibility, accommodating items of all shapes and sizes. It is also designed for easy assembly and reconfiguration.",
       specs2:[["Specification","Standard Dimensions"],["Width","24, 30, 36, 1M, 42, 48, 54\""],["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],["Height","30, 31, …, 120\""],["Frame Load Capacity","Up to 2,500 lbs per frame"],["Shelf Load Capacity","Up to 500 lbs per shelf"]] },
     { title:"4D Wide Span", img:"assets/pipe3.png",
-      blurb:"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease. Engineered for strength and versatility, its robust beams support direct item placement, while optional drop panels transform the structure into sturdy shelving. For enhanced functionality, 4D frames seamlessly integrate with SmartShelf 4-Post accessories, delivering unmatched adaptability to meet your storage needs.",
+      blurb:"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease...",
       specs2:[["Specification","Capacity"],["Load per Bay","Up to 5,000 lbs per bay (2 268 kg)"],["Load per Level","3\" Beam : 1,000 lbs per pair of beam (454 kg)"],["Span","4\" Beam : 1,500 lbs per pair of beam (680 kg)"],["Height","4' to 8' (1.2 m to 2.4 m)"],["Depth","Up to 20' (6.1 m)"]] },
     { title:"SmartSpace", img:"assets/pipe4.png",
-      blurb:"Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects. Designed with efficiency in mind, the SmartSpace system ensures quick and hassle-free installation, helping you save time and reduce expenses. Choose between two tailored options, manual or mechanically assisted, to meet your unique storage requirements with ease and precision.",
-      specs2:[["Specification","Capacity"],["Section Load Capacity","2,000 lbs per section (907 kg)"],["Section Length","24\" to 48\" (0.61m - 1.2m)"],["Section Depth","Panels: 12\" to 48\" (0.3m - 1.2 m) / Columns: 18\" to 48\" (0.5m - 1.2m)"],["Carriage Load Capacity","16,000 lbs per carriage (7270kg)"],["Carriage Length","Max 24' (7.3 m)"]] },
+      blurb:"Montel’s SmartSpace storage system offers a cost-effective and versatile solution for organizing light objects...",
+      specs2:[["Specification","Capacity"],["Section Load Capacity","2,000 lbs per section (907 kg)"],["Section Length","24\" to 48\" (0.61m - 1.2m)"],["Section Depth","Panels: 12\" to 48\" / Columns: 18\" to 48\""],["Carriage Load Capacity","16,000 lbs per carriage (7270kg)"],["Carriage Length","Max 24' (7.3 m)"]] },
     { title:"SmartGlide", img:"assets/pipe5.png",
-      blurb:"Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system that leverages your available space to maximize storage efficiency. It’s an excellent alternative when space limitations prevent you from using one of our larger mobile systems.\n\nAPPLICATION: Unlike other mobile systems, you do not have to open up an aisle to access your stored material. Just slide the system laterally to reach what you need. This allows you to make full use of your storage space without wasting a square inch.\n\nFor high-density storage of relatively small and light items in tight quarters, such as files, boxes, medications, and parts, it's vastly superior to conventional filing and storage systems.",
+      blurb:"Montel’s SmartGlide push & glide modular lateral storage system is a compact, high-density movable shelving system...",
       specs2:null },
     { title:"GREENRAK", img:"assets/greenrak.png",
-      blurb:"Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications. Its lightweight, rust-resistant, and simple design allows for easy installation, use, and maintenance.",
+      blurb:"Montel’s GREENRAK® 2.0 mobile system has been developed specifically for growing applications...",
       specs3:{ headers:["Specification","Section","Mobile"], rows:[["Load","Max 2,400 lbs/section","Max 18,000 lbs/mobile"],["Depth","—","36”, 42”, 48”"],["Length","4’, 8’","Max 50’"]] } },
     { title:"Mobilex", img:"assets/pipe7.png",
-      blurb:"Montel's Mobilex mechanical-assist mobile storage systems provide your organization with the flexibility to customize high-density storage solutions to meet your unique needs. Its innovative mechanism allows for effortless access and mobilization of your items.",
+      blurb:"Montel's Mobilex mechanical-assist mobile storage systems provide your organization with flexibility...",
       specs2:[["Specification","Capacity"],["Load Capacity","1,000 lbs per linear foot (1 488kg/m)"],["Depth","3' to 45' (0.91m - 13.7m)"],["Length","15\" to 48\" (0.4m - 2.4 m)"]] },
     { title:"SAFERAK 32P & 60P", img:"assets/pipe8.png",
-      blurb:"Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system. Designed for industrial environments, the SAFERAK® 32P & 60P can handle, respectively, an impressive load capacity of 32,000 lbs and 60,000 lbs per double rack section, optimizing storage efficiency and cutting costs. Embrace the future with smart factory technology, fully equipped for Industry 4.0 to boost your production efficiency and adaptability through seamless digital transformation.",
+      blurb:"Unlock the full potential of your storage with Montel’s cutting-edge powered mobile racking system...",
       specs3:{ headers:["Specification","SAFERAK 32P","SAFERAK 60P"], rows:[["Load per Double-Bay","32,000lbs (14 500 kg)","60,000lbs (27 200 kg)"],["Load per Carriage","256,000 lbs (116 000 kg)","480,000 lbs (217 600 kg)"],["Bay Depth","Up to 8' (2.4 m)","Up to 8' (2.4 m)"],["Bay Width","Up to 12' (3.6 m)","Up to 12' (3.6 m)"],["Carriage Length","Up to 100’ (30 m)","Up to 120’ (36 m)"],["Industrial Safeties","YES","YES"],["PLC","YES","YES"],["Touchscreen UI","YES","YES"],["Signal Strobe and Buzzers","YES","YES"],["VPN eWon Connectivity","YES","YES"],["Rear Controls","Optional","Optional"],["In-Aisle E-Stops","Optional","Optional"],["Illuminated E-Stops","Optional","Optional"]] } }
   ];
 
@@ -536,75 +447,55 @@
         sBox.style.display='block';
       } else { sBox.style.display='none'; }
       box.style.display='block';
-    } else {
-      box.style.display='none'; imgEl.style.display='none';
-    }
+    } else { box.style.display='none'; imgEl.style.display='none'; }
   }
 
-  /* ---------- Loop ---------- */
   function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
     accumulator+=frameDt;
-
     while(accumulator>=STEP){
       if(state==='playing'){
-        // physics
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
-
-        // wrap top/bottom
         const topWrap=-bird.h*TOP_OVERLAP_FRAC, bottomWrap=H+bird.h*BOTTOM_OVERLAP_FRAC;
         if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
         else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
-
-        // spawner & scroll
         stepSpawner(STEP);
         for(const o of obstacles){ o.x-=SCROLL_PPS*STEP; }
         cleanupObstacles();
-
-        // animate sprite
         bird.animTime+=STEP;
       }
       accumulator-=STEP;
     }
-
     const leftover=(state==='playing')?accumulator:0;
-
-    // render
     ctx.clearRect(0,0,W,H);
     drawBackground();
-    bird.yRender = bird.y + (state==='playing' ? bird.v*leftover + 0.5*G*leftover*leftover : 0);
+    bird.yRender=bird.y + (state==='playing' ? bird.v*leftover + 0.5*G*leftover*leftover : 0);
     drawObstaclesInterpolated(leftover);
     bird.draw();
-
     if(state!=='title') drawVersionTag();
-
     if(state==='playing') collideAndScore(leftover);
-
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
 
-  /* ---------- Asset load ---------- */
-  (async () => {
+  (async ()=>{
     try{
-      const [sprite, fallback, bg, ...rest] = await Promise.all([
+      const [sprite,fallback,bg,...rest]=await Promise.all([
         loadImageWithTimeout("assets/bird-sprite.png"),
         loadImageWithTimeout("assets/bird.png"),
         loadImageWithTimeout("assets/bg.png"),
-        // pipes:
         ...PIPE_STYLES_CFG.flatMap(s=>[loadImageWithTimeout(s.bottom.url), loadImageWithTimeout(s.top.url)])
       ]);
       birdSprite=sprite||null; birdFallbackImg=(!birdSprite && fallback)?fallback:null; bgImg=bg||null;
-
       const results=rest; const bottoms=[], tops=[];
       for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=results[i*2]||null; tops[i]=results[i*2+1]||null; }
       Raw.bottoms=bottoms; Raw.tops=tops; rebuildStyles();
     }catch(_){ rebuildStyles(); }
   })();
 
-  /* ---------- Start on title ---------- */
+  let state='title', restartLocked=false;
   showTitle();
 
 })();
