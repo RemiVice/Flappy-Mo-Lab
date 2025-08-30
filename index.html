@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.95</title>
+<title>ROCKET MO — v1.97</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -112,7 +112,7 @@
 
 <script>
 (() => {
-  const VERSION='1.95';
+  const VERSION='1.97';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -205,8 +205,7 @@
   function makeScaledCanvas(img,w,h){
     const c=document.createElement('canvas'); c.width=w; c.height=h;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    if(img) g.drawImage(img,0,0,w,h);
-    else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); } // ✅ FIX: use w,h (no undefined drawW)
+    if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); }
     return c;
   }
   function buildCapBodyPx(img,drawW,capPxSrc,capFrom="top"){
@@ -267,8 +266,20 @@
   let spawnMode=MODE_VERT;
   let h1=0,h2=0,h3=0,hAfter=0;
 
-  // Corridor reservation to forbid any vertical spawn inside the 3-bar segment
+  // Corridor reservation to forbid verticals into the 3-bar segment
   let reservedUntilX=0;
+
+  // NEW: compute the furthest right edge of any existing vertical
+  function maxVerticalRightEdge(minX){
+    let m=minX;
+    for(const o of obstacles){
+      if(o.type==='V'){
+        const r=o.x+o.w;
+        if(r>m) m=r;
+      }
+    }
+    return m;
+  }
 
   function scheduleVertical(xPos){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx], w=sty.drawW;
@@ -294,19 +305,28 @@
       if((o.x + o.w) > x0 && o.x < x1){ obstacles.splice(i,1); }
     }
   }
+
   function reserveCorridorAndSpawnHorizontals(){
-    h1 = xCursor + BUFFER_PIXELS;
+    // Start after both the cursor AND the last vertical edge, plus buffer
+    const startAfter = Math.max(xCursor + BUFFER_PIXELS, maxVerticalRightEdge(xCursor) + BUFFER_PIXELS);
+
+    h1 = startAfter;
     h2 = h1 + H_BETWEEN;
     h3 = h2 + H_BETWEEN;
     hAfter = h3 + BUFFER_PIXELS;
+
     reservedUntilX = hAfter;
+
     purgeVerticalsInCorridor(h1, hAfter);
+
     scheduleHorizontal(h1);
     scheduleHorizontal(h2);
     scheduleHorizontal(h3);
+
     xCursor = hAfter;
     spawnMode = MODE_VERT;
   }
+
   function ensureAhead(){
     const aheadTarget = worldScroll + W + AHEAD_LIMIT;
     let guard=0;
@@ -407,8 +427,7 @@
     xCursor=W+FIRST_VERTICAL_LEAD; verticalCount=0; spawnMode=MODE_VERT; laneIdx=0;
     reservedUntilX=0;
 
-    ensureAhead();
-
+    ensureAhead(); // seed
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -442,7 +461,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* Systems panel (unchanged) */
+  /* Systems panel (unchanged content) */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -545,7 +564,6 @@
       for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=rest[i*2]||null; tops[i]=rest[i*2+1]||null; }
       Raw.bottoms=bottoms; Raw.tops=tops;
 
-      // Build styles even if some images failed (placeholders kick in)
       Styles.length=0;
       for(let i=0;i<PIPE_STYLES_CFG.length;i++){
         const cfg=PIPE_STYLES_CFG[i];
@@ -555,15 +573,11 @@
         const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom);
         Styles.push({ name:cfg.name, bottom, top:topset, drawW });
       }
-      // Safety: if somehow no styles, push one placeholder
       if(!Styles.length){
-        const drawW=PIPE_W;
-        const ph=makeScaledCanvas(null,drawW,120);
+        const drawW=PIPE_W, ph=makeScaledCanvas(null,drawW,120);
         Styles.push({ name:'PH', bottom:{cap:ph,body:ph}, top:{cap:ph,body:ph}, drawW });
       }
-    }catch(e){
-      console.error(e);
-    }
+    }catch(e){ console.error(e); }
     showTitle();
   })();
 
