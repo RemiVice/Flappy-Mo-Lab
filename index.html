@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.93</title>
+<title>ROCKET MO — v1.94</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -112,7 +112,7 @@
 
 <script>
 (() => {
-  const VERSION='1.93';
+  const VERSION='1.94';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -202,7 +202,7 @@
     { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
   ];
   const Raw={ bottoms:[], tops:[] }, Styles=[];
-  function makeScaledCanvas(img,w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); } return c; }
+  function makeScaledCanvas(img,w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); } return c; }
   function buildCapBodyPx(img,drawW,capPxSrc,capFrom="top"){
     if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.imageSmoothingEnabled=true; g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return {cap:ph, body:ph}; }
     const scale=drawW/(img.naturalWidth||img.width);
@@ -261,6 +261,9 @@
   let spawnMode=MODE_VERT;
   let h1=0,h2=0,h3=0,hAfter=0;
 
+  // NEW: corridor reservation to totally forbid any vertical spawn inside the 3-bar segment
+  let reservedUntilX=0; // any spawn x < reservedUntilX is disallowed for verticals
+
   function scheduleVertical(xPos){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx], w=sty.drawW;
     const margin=Math.round(H*0.10), maxSection=Math.round(H*0.45);
@@ -280,38 +283,64 @@
     obstacles.push({ type:'H', x:xPos, y:nextLane(), len:H_BAR_LEN, thick:sprite.height, styleIndex:idx, sprite, scored:false });
   }
   function purgeVerticalsInCorridor(x0,x1){
+    // Extra safe: remove any vertical whose body intersects [x0,x1)
     for(let i=obstacles.length-1;i>=0;i--){
       const o=obstacles[i]; if(o.type!=='V') continue;
-      if(o.x+o.w>x0 && o.x<x1){ obstacles.splice(i,1); }
+      if((o.x + o.w) > x0 && o.x < x1){ obstacles.splice(i,1); }
     }
   }
+
+  function reserveCorridorAndSpawnHorizontals(){
+    h1 = xCursor + BUFFER_PIXELS;
+    h2 = h1 + H_BETWEEN;
+    h3 = h2 + H_BETWEEN;
+    hAfter = h3 + BUFFER_PIXELS;
+
+    // Reserve BEFORE purging/placing to block any race in subsequent frames
+    reservedUntilX = hAfter;
+
+    // Purge any verticals already placed inside the corridor
+    purgeVerticalsInCorridor(h1, hAfter);
+
+    // Place the three horizontals now
+    scheduleHorizontal(h1);
+    scheduleHorizontal(h2);
+    scheduleHorizontal(h3);
+
+    // Jump cursor to the end of the corridor
+    xCursor = hAfter;
+
+    // Back to vertical mode
+    spawnMode = MODE_VERT;
+  }
+
   function ensureAhead(){
     const aheadTarget = worldScroll + W + AHEAD_LIMIT;
-    while(xCursor < aheadTarget){
+    // Fill the buffer in one go for determinism and to avoid near-frame races
+    let guard=0;
+    while(xCursor < aheadTarget && guard++ < 100){
       if(spawnMode===MODE_VERT){
+        // If the next vertical would land inside a reserved corridor, skip ahead
+        if(xCursor < reservedUntilX){
+          xCursor = reservedUntilX;
+          // continue; // not strictly needed; loop will re-check
+        }
         scheduleVertical(xCursor);
         xCursor += VERTICAL_X_GAP;
         verticalCount++;
         if(verticalCount>=10){
-          h1 = xCursor + BUFFER_PIXELS;
-          h2 = h1 + H_BETWEEN;
-          h3 = h2 + H_BETWEEN;
-          hAfter = h3 + BUFFER_PIXELS;
-          purgeVerticalsInCorridor(h1,hAfter);
-          spawnMode=MODE_HSEG;
+          // Switch pack: after exactly 10 verticals, do 3 horizontals
           verticalCount=0;
+          spawnMode=MODE_HSEG;
+          // Loop will place horizontals next iteration
         }
-        break;
       } else {
-        scheduleHorizontal(h1);
-        scheduleHorizontal(h2);
-        scheduleHorizontal(h3);
-        xCursor = hAfter;
-        spawnMode=MODE_VERT;
-        break;
+        // Spawn the 3 horizontals as an atomic block
+        reserveCorridorAndSpawnHorizontals();
       }
     }
   }
+
   function moveWorld(dt){ const dx=SCROLL_PPS*dt; worldScroll+=dx; for(const o of obstacles){ o.x-=dx; } xCursor-=dx; }
   function cleanupObstacles(){ for(let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; if((o.type==='V' && o.x+o.w<=0) || (o.type==='H' && o.x+o.len<=0)) obstacles.splice(i,1); } }
 
@@ -320,8 +349,8 @@
   const lastBadge=document.getElementById('lastBadge'); const godPill=document.getElementById('godPill');
   let score=0, lastScore=0; let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
 
-  let godMode=false;          // <-- GOD MODE FLAG
-  let godTapCount=0;          // how many taps on "Last" badge
+  let godMode=false;
+  let godTapCount=0;
   const GOD_TAPS=10;
 
   function setGodMode(on){
@@ -386,16 +415,19 @@
   const sysSpecsBox=document.getElementById('sysSpecsBox');
   const sysSpecs=document.getElementById('sysSpecs');
 
-  let state='title', restartLocked=false; // ✅ single declaration
+  let state='title', restartLocked=false;
 
   function showTitle(){ state='title'; restartLocked=false; splash.classList.remove('hidden'); gameOverCard.classList.add('hidden'); score=0; scoreEl.textContent='0'; bird.reset(); }
   function startGame(){
     if(state==='playing') return;
     state='playing'; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
+
     obstacles.length=0; worldScroll=0;
     xCursor=W+FIRST_VERTICAL_LEAD; verticalCount=0; spawnMode=MODE_VERT; laneIdx=0;
-    ensureAhead();
+    reservedUntilX=0; // clear reservation
+    ensureAhead(); // seed a full buffer
+
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -478,7 +510,7 @@
       if(info.img){ sysImg.style.opacity='0'; sysImg.onload=()=>sysImg.style.opacity='1'; sysImg.src=info.img; sysImg.style.display='block'; } else sysImg.style.display='none';
       sysSpecs.innerHTML='';
       if(info.specs3 && info.specs3.headers && info.specs3.rows){
-        const h=info.specs3.headers; sysSpecs.innerHTML='<thead><tr>'+h.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody></tbody>';
+        const h=info.specs3.headers; sysSpecs.innerHTML='<thead><tr>'+h.map(x=>`<th>${x}</th>').join('')+'</tr></thead><tbody></tbody>';
         const tb=sysSpecs.querySelector('tbody'); info.specs3.rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=r.map((c,k)=>`<td${k===0?' style="font-weight:600"':''}>${c}</td>`).join(''); tb.appendChild(tr); });
         sysSpecsBox.style.display='block';
       } else if(info.specs2){
@@ -535,7 +567,7 @@
     showTitle(); // enter start screen
   })();
 
-  addEventListener('error', ()=>{ try{ splash.classList.remove('hidden'); }catch(_){} }, {capture:true});
+  addEventListener('error', ()=>{ try{ document.getElementById('splash').classList.remove('hidden'); }catch(_){} }, {capture:true});
 
 })();
 </script>
