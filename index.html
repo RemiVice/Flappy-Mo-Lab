@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.83</title>
+<title>ROCKET MO — v1.84</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -28,14 +28,20 @@
     pointer-events:auto; width:min(720px,94vw);
     background:rgba(20,24,28,.86); color:#fff; border-radius:18px;
     border:1px solid rgba(255,255,255,.12); backdrop-filter:blur(6px);
-    box-shadow:0 22px 60px rgba(0,0,0,.55); padding:32px 26px 22px; text-align:center;
+    box-shadow:0 22px 60px rgba(0,0,0,.55); padding:28px 24px 18px; text-align:center;
   }
   .splash h1{
     margin:0 0 8px; font-weight:800; font-size:clamp(28px,7.2vw,56px);
     background:linear-gradient(180deg,#ffd54a 0%,#fff7c5 35%,#ff7a3a 100%);
     -webkit-background-clip:text; background-clip:text; color:transparent;
   }
-  .splash .hint{ opacity:.9; font-size:12px }
+  .splash .hint{ opacity:.9; font-size:12px; margin-top:6px }
+  .start-btn{
+    margin-top:16px; pointer-events:auto; cursor:pointer;
+    border:1px solid rgba(255,255,255,.18); background:#ff7a3a; color:#1a1e26;
+    font-weight:800; border-radius:12px; padding:10px 16px; font-size:16px;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
+  }
 
   .card{
     pointer-events:auto; color:#fff; background:var(--glass);
@@ -46,7 +52,6 @@
   }
   .card h1{ margin:0 0 8px; font-size:clamp(20px,4vw,34px); font-weight:800; color:#fff }
   .card p{ margin:0; font-size:clamp(13px,3.2vw,16px); color:#fff }
-
   .hidden{ display:none }
 
   #sysImg { max-width:100%; max-height:240px; object-fit:contain; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:10px; margin:10px auto; display:none; opacity:0; transition:opacity .25s ease; }
@@ -73,6 +78,7 @@
   <div id="splash" class="splash" tabindex="0" aria-label="Title Screen">
     <h1>ROCKET MO</h1>
     <div class="hint">Tap anywhere or press Space/Enter • Best is saved</div>
+    <button id="startBtn" class="start-btn">Start</button>
   </div>
 
   <div id="gameOverCard" class="card hidden" style="align-self:flex-start; margin-top:20px;">
@@ -99,7 +105,7 @@
 
 <script>
 (() => {
-  const VERSION='1.83';
+  const VERSION='1.84';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -137,10 +143,10 @@
   const FIRST_VERTICAL_LEAD=VERTICAL_X_GAP;
 
   const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
-  const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
+  const TOP_OVERLAP_FRAC=0.35, BOTTOM_OVERLAP_FRAC=0.75; /* a bit more permissive on top */
   const BIRD_INSET=8, GAP_FORGIVE=12;
 
-  /* Bird sprite (locked to scale 1 as requested) */
+  /* Bird sprite (scale locked to 1) */
   const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12;
   const BIRD_SPRITE_SCALE=1;
   const BIRD_ANCHOR_X_FRAC=0.58, BIRD_ANCHOR_Y_FRAC=0.50;
@@ -174,7 +180,7 @@
     }
   };
 
-  /* Assets */
+  /* Background */
   function loadImageWithTimeout(src,timeout=6000){
     return new Promise((res)=>{ if(!src){ res(null); return; }
       const img=new Image(); img.referrerPolicy='no-referrer';
@@ -195,7 +201,7 @@
   }
   function drawBackground(){ if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; } if(!bgCache) bgCache=buildBgCache(); ctx.drawImage(bgCache,0,0); }
 
-  /* Pipe styles */
+  /* Pipe art */
   const PIPE_STYLES_CFG=[
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -262,7 +268,7 @@
     return c;
   }
 
-  /* Obstacles + WORLD-CURSOR SPAWNER (no timers, no overlap) */
+  /* WORLD-CURSOR SPAWNER */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
@@ -271,13 +277,8 @@
   const H_BETWEEN      =Math.round(W*0.25);
   const H_BAR_LEN      =Math.round(W*0.55);
 
-  // world scroll (how far we’ve moved to the left)
   let worldScroll=0;
-
-  // spawnCursor is the X (in screen coordinates) where next obstacle will appear.
-  // It moves left with the world so the “distance ahead” remains stable.
   let spawnCursor = W + FIRST_VERTICAL_LEAD;
-
   let patternMode='VERT', vertSpawned=0, hLeft=0;
 
   function spawnVerticalAt(xPos){
@@ -298,7 +299,6 @@
 
     obstacles.push({ type:'V', x:xPos, top, gap, w, styleIndex:idx, scored:false, sprite:makeVerticalSprite(sty,top,gap,w) });
   }
-
   function spawnOneHorizontalAt(xPos){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx];
     const sprite=makeHorizontalSprite(sty,H_BAR_LEN);
@@ -307,10 +307,7 @@
     const yMid=randInt(margin + thick/2, H - (margin + thick/2));
     obstacles.push({ type:'H', x:xPos, y:yMid, len:H_BAR_LEN, thick, styleIndex:idx, sprite, scored:false });
   }
-
-  // Always keep obstacles laid out until we have ~2.5 screens ahead
   const AHEAD_LIMIT = Math.round(W*2.5);
-
   function ensureAhead(){
     while(spawnCursor < W + AHEAD_LIMIT){
       if(patternMode==='VERT'){
@@ -320,24 +317,22 @@
         if(vertSpawned>=10){
           patternMode='HSET';
           hLeft=3;
-          spawnCursor += H_BUFFER_BEFORE;  // gap BEFORE first horizontal
+          spawnCursor += H_BUFFER_BEFORE;
         }
       } else {
         spawnOneHorizontalAt(spawnCursor);
         hLeft--;
-        spawnCursor += (hLeft>0 ? H_BETWEEN : H_BUFFER_AFTER); // between bars / AFTER group
+        spawnCursor += (hLeft>0 ? H_BETWEEN : H_BUFFER_AFTER);
         if(hLeft<=0){ patternMode='VERT'; vertSpawned=0; }
       }
     }
   }
-
   function moveWorld(dt){
-    const dx = SCROLL_PPS*dt;
-    worldScroll += dx;
-    for(const o of obstacles){ o.x -= dx; }
-    spawnCursor -= dx;       // keep the ahead-distance stable
+    const dx=SCROLL_PPS*dt;
+    worldScroll+=dx;
+    for(const o of obstacles){ o.x-=dx; }
+    spawnCursor-=dx;
   }
-
   function cleanupObstacles(){
     for(let i=obstacles.length-1;i>=0;i--){
       const o=obstacles[i];
@@ -350,7 +345,7 @@
   let score=0, lastScore=0;
   let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
 
-  function collideAndScore(leftover){
+  function collideAndScore(){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
     for(const o of obstacles){
@@ -377,14 +372,22 @@
     return false;
   }
 
-  /* UI flow */
+  /* UI flow (single declaration — no duplicates) */
   const splash=document.getElementById('splash');
+  const startBtn=document.getElementById('startBtn');
   const gameOverCard=document.getElementById('gameOverCard');
   const finalScoreP=document.getElementById('finalScoreP');
+  const sysImg=document.getElementById('sysImg');
+  const sysInfoBox=document.getElementById('sysInfoBox');
+  const sysTitle=document.getElementById('sysTitle');
+  const sysBlurb=document.getElementById('sysBlurb');
+  const sysSpecsBox=document.getElementById('sysSpecsBox');
+  const sysSpecs=document.getElementById('sysSpecs');
 
   let state='title', restartLocked=false;
 
-  function showTitle(){ state='title'; restartLocked=false;
+  function showTitle(){
+    state='title'; restartLocked=false;
     splash.classList.remove('hidden'); gameOverCard.classList.add('hidden');
     score=0; scoreEl.textContent='0'; bird.reset();
   }
@@ -393,13 +396,11 @@
     state='playing'; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
 
-    // reset world + spawner
     obstacles.length=0;
     worldScroll=0;
     spawnCursor = W + FIRST_VERTICAL_LEAD;
     patternMode='VERT'; vertSpawned=0; hLeft=0;
-
-    ensureAhead(); // lay out the first batch immediately
+    ensureAhead();
 
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
@@ -413,15 +414,17 @@
   }
 
   function globalPointerStart(e){
-    if(e.target.closest('#gameOverCard')) return;
+    if(e && e.target && e.target.closest('#gameOverCard')) return;
     if(state==='title'){ startGame(); return; }
-    if(state==='playing'){ e.preventDefault(); bird.flap(); return; }
+    if(state==='playing'){ e && e.preventDefault(); bird.flap(); return; }
     if(state==='gameover' && !restartLocked){ startGame(); }
   }
   document.addEventListener('pointerdown', globalPointerStart, {passive:false, capture:true});
-  splash.addEventListener('click', ()=>{ if(state!=='playing') startGame(); }, {passive:true});
+  startBtn.addEventListener('click', ()=>{ startGame(); });
+  splash.addEventListener('click', (e)=>{ if(e.target===startBtn) return; if(state!=='playing') startGame(); }, {passive:true});
   splash.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.code==='Space'||e.key===' '){ e.preventDefault(); startGame(); }});
   splash.setAttribute('tabindex','0');
+
   document.addEventListener('keydown',(e)=>{
     if(e.repeat) return;
     if(e.code==='Space'||e.key===' '){
@@ -435,7 +438,7 @@
     }
   });
 
-  /* Game Over data */
+  /* Game Over data (your full copy) */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -476,42 +479,33 @@
         ["Illuminated E-Stops","Optional","Optional"]
       ] } }
   ];
-
   function fillSystemPanel(hitStyleIdx){
-    const imgEl=document.getElementById('sysImg');
-    const box=document.getElementById('sysInfoBox');
-    const tEl=document.getElementById('sysTitle');
-    const bEl=document.getElementById('sysBlurb');
-    const sBox=document.getElementById('sysSpecsBox');
-    const sEl=document.getElementById('sysSpecs');
-
     if(typeof hitStyleIdx==='number' && SYSTEMS[hitStyleIdx]){
       const info=SYSTEMS[hitStyleIdx];
-      tEl.textContent=info.title||`System ${hitStyleIdx+1}`;
-      bEl.textContent=info.blurb||'';
-      if(info.img){ imgEl.style.opacity='0'; imgEl.onload=()=>imgEl.style.opacity='1'; imgEl.src=info.img; imgEl.style.display='block'; } else imgEl.style.display='none';
-
-      sEl.innerHTML='';
+      sysTitle.textContent=info.title||`System ${hitStyleIdx+1}`;
+      sysBlurb.textContent=info.blurb||'';
+      if(info.img){ sysImg.style.opacity='0'; sysImg.onload=()=>sysImg.style.opacity='1'; sysImg.src=info.img; sysImg.style.display='block'; } else sysImg.style.display='none';
+      sysSpecs.innerHTML='';
       if(info.specs3 && info.specs3.headers && info.specs3.rows){
         const h=info.specs3.headers;
-        sEl.innerHTML='<thead><tr>'+h.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody></tbody>';
-        const tb=sEl.querySelector('tbody');
+        sysSpecs.innerHTML='<thead><tr>'+h.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody></tbody>';
+        const tb=sysSpecs.querySelector('tbody');
         info.specs3.rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=r.map((c,i)=>`<td${i===0?' style="font-weight:600"':''}>${c}</td>`).join(''); tb.appendChild(tr); });
-        sBox.style.display='block';
+        sysSpecsBox.style.display='block';
       } else if(info.specs2){
         const [header,...rows]=info.specs2;
-        sEl.innerHTML='<thead><tr>'+header.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody></tbody>';
-        const tb=sEl.querySelector('tbody');
+        sysSpecs.innerHTML='<thead><tr>'+header.map(x=>`<th>${x}</th>`).join('')+'</tr></thead><tbody></tbody>';
+        const tb=sysSpecs.querySelector('tbody');
         rows.forEach(r=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td style="font-weight:600">${r[0]}</td><td>${r[1]}</td>`; tb.appendChild(tr); });
-        sBox.style.display='block';
-      } else { sBox.style.display='none'; }
-      box.style.display='block';
-    } else { box.style.display='none'; imgEl.style.display='none'; }
+        sysSpecsBox.style.display='block';
+      } else { sysSpecsBox.style.display='none'; }
+      sysInfoBox.style.display='block';
+    } else { sysInfoBox.style.display='none'; sysImg.style.display='none'; }
   }
 
   function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
-  /* Loop */
+  /* Main loop */
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
     accumulator+=frameDt;
@@ -523,27 +517,21 @@
         if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
         else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
 
-        moveWorld(STEP);      // scroll everything and the spawn cursor
-        ensureAhead();        // make sure we always have future obstacles laid out
-        cleanupObstacles();
+        moveWorld(STEP); ensureAhead(); cleanupObstacles();
         bird.animTime+=STEP;
       }
       accumulator-=STEP;
     }
 
-    ctx.clearRect(0,0,W,H);
-    drawBackground();
-
+    ctx.clearRect(0,0,W,H); drawBackground();
     bird.yRender=bird.y;
-    // draw obstacles at their current screen-space x
     for(const o of obstacles){
       if(o.type==='V'){ if(o.sprite) ctx.drawImage(o.sprite,o.x,0,o.w,H); }
       else { ctx.drawImage(o.sprite, o.x, o.y - o.thick/2); }
     }
     bird.draw();
-
     if(state!=='title') drawVersionTag();
-    if(state==='playing') collideAndScore(0);
+    if(state==='playing') collideAndScore();
 
     requestAnimationFrame(loop);
   }
@@ -559,75 +547,14 @@
         ...PIPE_STYLES_CFG.flatMap(s=>[loadImageWithTimeout(s.bottom.url), loadImageWithTimeout(s.top.url)])
       ]);
       birdSprite=sprite||null; birdFallbackImg=(!birdSprite && fallback)?fallback:null; bgImg=bg||null;
-      const results=rest; const bottoms=[], tops=[];
-      for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=results[i*2]||null; tops[i]=results[i*2+1]||null; }
+      const bottoms=[], tops=[]; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=rest[i*2]||null; tops[i]=rest[i*2+1]||null; }
       Raw.bottoms=bottoms; Raw.tops=tops; rebuildStyles();
-    }catch(_){ rebuildStyles(); }
+    }catch(e){ console.error(e); rebuildStyles(); }
+    showTitle();
   })();
 
-  /* Start/Restart wiring */
-  const splash=document.getElementById('splash');
-  const gameOverCard=document.getElementById('gameOverCard');
-  const finalScoreP=document.getElementById('finalScoreP');
-
-  let state='title', restartLocked=false;
-
-  function showTitle(){ state='title'; restartLocked=false;
-    splash.classList.remove('hidden'); gameOverCard.classList.add('hidden');
-    bird.reset();
-    score=0; document.getElementById('scoreVal').textContent='0';
-  }
-  showTitle();
-
-  function startGame(){
-    if(state==='playing') return;
-    state='playing'; restartLocked=false;
-
-    // reset scoring
-    const lastScoreEl=document.getElementById('lastVal');
-    lastScoreEl.textContent=score;
-    score=0; document.getElementById('scoreVal').textContent='0';
-
-    // reset world/spawn
-    obstacles.length=0;
-    worldScroll=0;
-    spawnCursor = W + FIRST_VERTICAL_LEAD;
-    patternMode='VERT'; vertSpawned=0; hLeft=0;
-    ensureAhead();
-
-    bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
-  }
-  function endGame(hitStyleIdx){
-    if(state==='gameover') return;
-    state='gameover'; bird.v=0;
-    finalScoreP.textContent=`Score: ${score} • Best: ${Number(localStorage.getItem('flappyMoBest')||0)}`;
-    fillSystemPanel(hitStyleIdx);
-    gameOverCard.classList.remove('hidden'); gameOverCard.scrollTop=0;
-    restartLocked=true; setTimeout(()=>{ restartLocked=false; },900);
-  }
-
-  function globalPointerStart(e){
-    if(e.target.closest('#gameOverCard')) return;
-    if(state==='title'){ startGame(); return; }
-    if(state==='playing'){ e.preventDefault(); bird.flap(); return; }
-    if(state==='gameover' && !restartLocked){ startGame(); }
-  }
-  document.addEventListener('pointerdown', globalPointerStart, {passive:false, capture:true});
-  splash.addEventListener('click', ()=>{ if(state!=='playing') startGame(); }, {passive:true});
-  splash.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.code==='Space'||e.key===' '){ e.preventDefault(); startGame(); }});
-  splash.setAttribute('tabindex','0');
-  document.addEventListener('keydown',(e)=>{
-    if(e.repeat) return;
-    if(e.code==='Space'||e.key===' '){
-      if(state==='title') startGame();
-      else if(state==='gameover'){ if(!restartLocked) startGame(); }
-      else bird.flap();
-      e.preventDefault();
-    }
-    if(e.key==='Enter'){
-      if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame();
-    }
-  });
+  /* Panic watchdog: show Start button if any runtime error bubbles */
+  addEventListener('error', ()=>{ try{ splash.classList.remove('hidden'); }catch(_){} }, {capture:true});
 
 })();
 </script>
