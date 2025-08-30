@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.78</title>
+<title>ROCKET MO — v1.79</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -104,7 +104,7 @@
 
 <script>
 (() => {
-  const VERSION='1.78';
+  const VERSION='1.79';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ---------- Canvas ---------- */
@@ -156,7 +156,7 @@
 
   /* ---------- Bird sprite (logo + flame) ---------- */
   const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12;
-  const BIRD_SPRITE_SCALE=1;   // width scale to show flame tail
+  const BIRD_SPRITE_SCALE=1.55;   // width scale to show flame tail
   const BIRD_ANCHOR_X_FRAC=0.58;  // visual center inside sprite frame
   const BIRD_ANCHOR_Y_FRAC=0.50;
 
@@ -186,7 +186,7 @@
         const idx=Math.floor(this.animTime*BIRD_SPRITE_FPS)%BIRD_SPRITE_FRAMES;
         const sx=idx*frameW;
 
-        /* Preserve aspect ratio of the frame */
+        /* Preserve aspect ratio of sprite frame */
         const aspect = frameW / frameH;
         const drawH  = this.h;                          // fit by height (keeps gameplay scale)
         const drawW  = drawH * aspect * BIRD_SPRITE_SCALE;
@@ -267,23 +267,39 @@
     return c;
   }
 
-  // Horizontal using full bottom image (rotated left; never cut the source)
-  function makeHorizontalSprite(sty, len, thick){
+  // Horizontal using full *bottom* image, rotated left.
+  // IMPORTANT: thickness == sty.drawW to preserve native pipe aspect (no squashing).
+  function makeHorizontalSprite(sty, len){
     const src=sty.botImg;
+    const thick = sty.drawW;           // visual thickness equals vertical pipe width
     const c=document.createElement('canvas'); c.width=len; c.height=thick;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+
     if(src && (src.naturalWidth||src.width)){
       const sw=src.naturalWidth||src.width, sh=src.naturalHeight||src.height;
+      // Scale uniformly so rotated image height == thick
       const scale=thick/sw;
-      const temp=document.createElement('canvas');
-      temp.width=Math.max(1,Math.round(sh*scale));
-      temp.height=Math.max(1,Math.round(sw*scale));
-      const tg=temp.getContext('2d'); tg.imageSmoothingEnabled=true;
-      tg.save(); tg.translate(0,temp.height); tg.rotate(-Math.PI/2);
-      tg.drawImage(src,0,0,sw,sh,0,0,sw,temp.height); tg.restore();
-      let x=0; while(x+temp.width<=len){ g.drawImage(temp,x,0); x+=temp.width; }
-      const rem=len-x; if(rem>0) g.drawImage(temp,0,0,rem,temp.height,x,0,rem,temp.height);
-    } else { g.fillStyle='#3a9b6a'; g.fillRect(0,0,len,thick); }
+
+      // Rotate entire original bottom image -90°, then tile across
+      const tile=document.createElement('canvas');
+      tile.width=Math.max(1,Math.round(sh*scale));   // length per tile
+      tile.height=Math.max(1,Math.round(sw*scale));  // == thick
+      const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
+
+      tg.save();
+      tg.translate(0, tile.height);   // rotate about left-bottom
+      tg.rotate(-Math.PI/2);
+      tg.drawImage(src, 0,0, sw,sh, 0,0, sw, tile.height); // sw -> tile.height == thick
+      tg.restore();
+
+      // Tile horizontally to fill 'len' exactly (no stretch)
+      let x=0;
+      while(x+tile.width<=len){ g.drawImage(tile,x,0); x+=tile.width; }
+      const rem=len-x;
+      if(rem>0){ g.drawImage(tile,0,0, rem, tile.height, x,0, rem, tile.height); }
+    } else {
+      g.fillStyle='#3a9b6a'; g.fillRect(0,0,len,thick);
+    }
     return c;
   }
 
@@ -294,8 +310,7 @@
   // Your chosen buffers
   const H_BUFFER  = Math.round(W*0.06); // before/after horizontal set
   const H_BETWEEN = Math.round(W*0.25); // between horizontals within the set
-  const H_BAR_LEN   = Math.round(W*0.55);
-  const H_BAR_THICK = Math.round(H*0.09);
+  const H_BAR_LEN = Math.round(W*0.55); // length along X (no scaling in draw)
 
   function spawnVerticalAt(xPos){
     if(!Styles.length) return;
@@ -309,12 +324,14 @@
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx], w=sty.drawW;
     obstacles.push({ type:'V', x:xPos, top, gap, w, styleIndex:idx, scored:false, sprite:makeVerticalSprite(sty,top,gap,w) });
   }
+
   function spawnOneHorizontal(){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx];
-    const sprite=makeHorizontalSprite(sty,H_BAR_LEN,H_BAR_THICK);
+    const sprite=makeHorizontalSprite(sty, H_BAR_LEN);
+    const thick = sprite.height;    // exact draw thickness from sprite (sty.drawW)
     const margin=Math.round(H*0.12);
-    const yMid=randInt(margin, H-margin);
-    obstacles.push({ type:'H', x:W, y:yMid, len:H_BAR_LEN, thick:H_BAR_THICK, styleIndex:idx, sprite, scored:false });
+    const yMid=randInt(margin + thick/2, H - (margin + thick/2)); // keep fully on-screen
+    obstacles.push({ type:'H', x:W, y:yMid, len:H_BAR_LEN, thick, styleIndex:idx, sprite, scored:false });
   }
 
   // Pattern state: 10 vertical, then 3 horizontals
@@ -342,7 +359,8 @@
         if(o.sprite) ctx.drawImage(o.sprite,xR,0,o.w,H);
       } else {
         const xR=(state==='playing')?(o.x - SCROLL_PPS*leftover):o.x;
-        ctx.drawImage(o.sprite, xR, o.y - o.thick/2, o.len, o.thick);
+        // sprite is already len x thick; draw 1:1 (no scale)
+        ctx.drawImage(o.sprite, xR, o.y - o.thick/2);
       }
     }
   }
