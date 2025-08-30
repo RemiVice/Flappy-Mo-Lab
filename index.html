@@ -142,7 +142,7 @@
   const BIRD_INSET=8, GAP_FORGIVE=12;
 
   /* Bird sprite */
-  const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12, BIRD_SPRITE_SCALE=1;
+  const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12, BIRD_SPRITE_SCALE=1; // keep at 1 per your pref
   const BIRD_ANCHOR_X_FRAC=0.58, BIRD_ANCHOR_Y_FRAC=0.50;
   let birdSprite=null, birdFallbackImg=null, bgImg=null;
 
@@ -386,7 +386,7 @@
   const sysSpecsBox=document.getElementById('sysSpecsBox');
   const sysSpecs=document.getElementById('sysSpecs');
 
-  let state='title', restartLocked=false;
+  let state='title', restartLocked=false; // ✅ single declaration
 
   function showTitle(){ state='title'; restartLocked=false; splash.classList.remove('hidden'); gameOverCard.classList.add('hidden'); score=0; scoreEl.textContent='0'; bird.reset(); }
   function startGame(){
@@ -491,7 +491,6 @@
   }
 
   /* Main loop */
-  let state='title', restartLocked=false;
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
     accumulator+=frameDt;
@@ -535,15 +534,6 @@
     }catch(e){ console.error(e); }
     showTitle(); // enter start screen
   })();
-
-  /* Input */
-  function globalPointerStart(e){
-    if(e && e.target && e.target.closest('#gameOverCard')) return;
-    if(state==='title'){ startGame(); return; }
-    if(state==='playing'){ e && e.preventDefault(); bird.flap(); return; }
-    if(state==='gameover' && !restartLocked){ startGame(); }
-  }
-  document.addEventListener('pointerdown', globalPointerStart, {passive:false, capture:true});
 
   addEventListener('error', ()=>{ try{ splash.classList.remove('hidden'); }catch(_){} }, {capture:true});
 
