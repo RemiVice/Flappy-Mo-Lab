@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v2.00</title>
+<title>ROCKET MO — v2.01</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -111,7 +111,7 @@
 
 <script>
 (() => {
-  const VERSION='2.00';
+  const VERSION='2.01';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -201,12 +201,7 @@
     { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
   ];
   const Raw={ bottoms:[], tops:[] }, Styles=[];
-  function makeScaledCanvas(img,w,h){
-    const c=document.createElement('canvas'); c.width=w; c.height=h;
-    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); }
-    return c;
-  }
+  function makeScaledCanvas(img,w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); } return c; }
   function buildCapBodyPx(img,drawW,capPxSrc,capFrom="top"){
     if(!img){ const ph=makeScaledCanvas(null,drawW,120); return {cap:ph, body:ph}; }
     const scale=drawW/(img.naturalWidth||img.width);
@@ -225,11 +220,11 @@
   /* --- helpers for “whole PNG” horizontal bars --- */
   function rotateLeftCanvas(srcCanvas){
     const c=document.createElement('canvas');
-    c.width=srcCanvas.height;  // swap
+    c.width=srcCanvas.height;
     c.height=srcCanvas.width;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    g.translate(0, c.height);  // move origin to bottom-left
-    g.rotate(-Math.PI/2);      // 90° left (CCW)
+    g.translate(0, c.height);
+    g.rotate(-Math.PI/2);
     g.drawImage(srcCanvas,0,0);
     return c;
   }
@@ -241,20 +236,12 @@
     g.drawImage(srcCanvas,0,0,w,targetH);
     return c;
   }
-  function makeHorizTileFromRawBottom(imgRaw, targetThick){
-    // scale raw bottom PNG to PIPE draw width first (so textures match verticals)
-    const w=Math.round(PIPE_W); // base width before style scale; we’ll scale again with style.scale
-    const scaledBase=makeScaledCanvas(imgRaw, w, Math.round(imgRaw.naturalHeight*(w/imgRaw.naturalWidth)));
-    const rotated=rotateLeftCanvas(scaledBase);             // full image, rotated left
-    const tile=scaleCanvasToHeight(rotated, targetThick);   // keep whole image, just scale
-    return tile; // this tile will be repeated end-to-end with NO cropping
-  }
   function makeHorizontalSpriteWhole(tileCanvas, minLen){
-    if(!tileCanvas){ // safe fallback
+    if(!tileCanvas){
       const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(minLen)); c.height=64;
       const g=c.getContext('2d'); g.fillStyle="#2e8b57"; g.fillRect(0,0,c.width,c.height); return c;
     }
-    const n=Math.max(1, Math.ceil(minLen / tileCanvas.width)); // do not crop, extend to full tiles
+    const n=Math.max(1, Math.ceil(minLen / tileCanvas.width));
     const c=document.createElement('canvas'); c.width=n*tileCanvas.width; c.height=tileCanvas.height;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
     for(let i=0,x=0;i<n;i++,x+=tileCanvas.width) g.drawImage(tileCanvas,x,0);
@@ -279,25 +266,21 @@
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  // Trio tuned for the “- _ -” look
   const BUFFER_PIXELS = Math.round(W*0.04);
-  const H_BETWEEN     = Math.round(VERTICAL_X_GAP*0.75);
-  const H_BAR_MINLEN  = Math.round(VERTICAL_X_GAP*0.80); // minimum; actual sprite extends to full tiles
+  const H_BAR_MINLEN  = Math.round(VERTICAL_X_GAP*0.80); // min target per bar
+  const H_GAP         = Math.round(W*0.012);             // small visual gap between bars
   const H_LANES       = [ Math.round(H*0.30), Math.round(H*0.52), Math.round(H*0.74) ];
-  const TRIO_ORDER    = [0,2,1]; // top, bottom, mid
+  const TRIO_ORDER    = [0,2,1]; // top, bottom, mid  => "- _ -"
 
   let worldScroll=0;
   let xCursor=W+FIRST_VERTICAL_LEAD;
   let verticalCount=0;
 
   const AHEAD_LIMIT=Math.round(W*2.2);
-
   const MODE_VERT='VERT', MODE_HSEG='HSEG';
   let spawnMode=MODE_VERT;
-
   let reservedUntilX=0;
 
-  // find rightmost vertical edge so trios start strictly after
   function maxVerticalRightEdge(minX){
     let m=minX;
     for(const o of obstacles){ if(o.type==='V'){ const r=o.x+o.w; if(r>m) m=r; } }
@@ -318,15 +301,43 @@
     obstacles.push({ type:'V', x:xPos, top, gap, w, styleIndex:idx, scored:false, sprite:makeVerticalSprite(sty,top,gap,w) });
   }
 
-  function scheduleHorizontal(xPos, laneIndex){
-    const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx];
-    // Build a whole-image, rotated-left, repeated bar (no cropping)
-    const sprite=makeHorizontalSpriteWhole(sty.hTile, H_BAR_MINLEN);
-    obstacles.push({
-      type:'H', x:xPos, y:H_LANES[laneIndex],
-      len:sprite.width, thick:sprite.height, styleIndex:idx,
-      sprite, scored:false
-    });
+  // Build style caches (including horizontal tiles)
+  function rotateLeftFromRaw(raw, drawW){
+    const scaledToStyle=makeScaledCanvas(raw, drawW, Math.round(raw.naturalHeight*(drawW/raw.naturalWidth)));
+    const rotated=rotateLeftCanvas(scaledToStyle);
+    return scaleCanvasToHeight(rotated, drawW); // thickness = drawW
+  }
+
+  function spawnHorizontalTrio(){
+    const startAfter = Math.max(xCursor, maxVerticalRightEdge(xCursor)) + BUFFER_PIXELS;
+
+    // pick styles for each bar
+    const s1=Math.floor(Math.random()*Styles.length);
+    const s2=Math.floor(Math.random()*Styles.length);
+    const s3=Math.floor(Math.random()*Styles.length);
+
+    // build sprites to know true lengths
+    const spr1=makeHorizontalSpriteWhole(Styles[s1].hTile, H_BAR_MINLEN);
+    const spr2=makeHorizontalSpriteWhole(Styles[s2].hTile, H_BAR_MINLEN);
+    const spr3=makeHorizontalSpriteWhole(Styles[s3].hTile, H_BAR_MINLEN);
+
+    const len1=spr1.width, len2=spr2.width, len3=spr3.width;
+
+    const x1=startAfter;
+    const x2=x1 + len1 + H_GAP;
+    const x3=x2 + len2 + H_GAP;
+
+    const after = x3 + len3 + BUFFER_PIXELS; // corridor ends after last bar
+
+    reservedUntilX = after;
+    purgeVerticalsInCorridor(x1, after);
+
+    obstacles.push({type:'H', x:x1, y:H_LANES[TRIO_ORDER[0]], len:len1, thick:spr1.height, styleIndex:s1, sprite:spr1, scored:false});
+    obstacles.push({type:'H', x:x2, y:H_LANES[TRIO_ORDER[1]], len:len2, thick:spr2.height, styleIndex:s2, sprite:spr2, scored:false});
+    obstacles.push({type:'H', x:x3, y:H_LANES[TRIO_ORDER[2]], len:len3, thick:spr3.height, styleIndex:s3, sprite:spr3, scored:false});
+
+    xCursor = after;
+    spawnMode = MODE_VERT;
   }
 
   function purgeVerticalsInCorridor(x0,x1){
@@ -334,26 +345,6 @@
       const o=obstacles[i]; if(o.type!=='V') continue;
       if((o.x + o.w) > x0 && o.x < x1) obstacles.splice(i,1);
     }
-  }
-
-  function spawnHorizontalTrio(){
-    const startAfter = Math.max(xCursor, maxVerticalRightEdge(xCursor)) + BUFFER_PIXELS;
-    const x1 = startAfter, x2 = x1 + H_BETWEEN, x3 = x2 + H_BETWEEN;
-
-    // we don't know exact bar widths (no cropping), so compute after we create the first bar tile width
-    // but spacing is based on x1/x2/x3 only; the bars themselves render at their own lengths.
-    const tmpSprite = makeHorizontalSpriteWhole(Styles[0].hTile, H_BAR_MINLEN); // just to get min bar width
-    const after = x3 + BUFFER_PIXELS + tmpSprite.width;
-
-    reservedUntilX = after;
-    purgeVerticalsInCorridor(x1, after);
-
-    scheduleHorizontal(x1, TRIO_ORDER[0]);
-    scheduleHorizontal(x2, TRIO_ORDER[1]);
-    scheduleHorizontal(x3, TRIO_ORDER[2]);
-
-    xCursor = after;  // continue after the trio
-    spawnMode = MODE_VERT;
   }
 
   function ensureAhead(){
@@ -367,7 +358,7 @@
         verticalCount++;
         if(verticalCount>=10){ verticalCount=0; spawnMode=MODE_HSEG; }
       } else {
-        spawnHorizontalTrio();
+        spawnHorizontalTrio(); // exact widths, no overlap
       }
     }
   }
@@ -387,7 +378,6 @@
   function collideAndScore(){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
-
     for(const o of obstacles){
       if(o.type==='V'){
         const overlapX=(bx2>o.x)&&(bx1<o.x+o.w);
@@ -397,10 +387,7 @@
         }
         if(!o.scored && (o.x+o.w)<bx1){
           o.scored=true;
-          if(!godMode){
-            score++; scoreEl.textContent=score;
-            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
-          }
+          if(!godMode){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
         }
       } else {
         const rx1=o.x, rx2=o.x+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
@@ -408,10 +395,7 @@
         if(overlap){ if(!godMode){ endGame(o.styleIndex); return true; } }
         if(!o.scored && rx2<bx1){
           o.scored=true;
-          if(!godMode){
-            score++; scoreEl.textContent=score;
-            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
-          }
+          if(!godMode){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
         }
       }
     }
@@ -441,7 +425,7 @@
     obstacles.length=0; worldScroll=0;
     xCursor=W+FIRST_VERTICAL_LEAD; verticalCount=0; spawnMode=MODE_VERT; reservedUntilX=0;
 
-    ensureAhead(); // seed
+    ensureAhead();
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -475,7 +459,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* Systems panel content (unchanged) */
+  /* Systems content */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -578,24 +562,17 @@
       for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=rest[i*2]||null; tops[i]=rest[i*2+1]||null; }
       Raw.bottoms=bottoms; Raw.tops=tops;
 
-      // Build per-style caches
       Styles.length=0;
       for(let i=0;i<PIPE_STYLES_CFG.length;i++){
         const cfg=PIPE_STYLES_CFG[i];
-        const botRaw=Raw.bottoms[i], topRaw=Raw.tops[i];
+        const bot=Raw.bottoms[i], top=Raw.tops[i];
         const drawW=Math.round(PIPE_W*(cfg.scale||1));
-        const bottom=buildCapBodyPx(botRaw,drawW,cfg.bottom.capPx,cfg.bottom.capFrom);
-        const topset=buildCapBodyPx(topRaw,drawW,cfg.top.capPx,cfg.top.capFrom);
+        const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom);
+        const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom);
 
-        // Horizontal “tile” = full raw bottom PNG, rotated left, scaled to drawW thickness
+        // Horizontal tile from the WHOLE bottom PNG, rotated 90° left, thickness = drawW
         let hTile=null;
-        if(botRaw && botRaw.naturalWidth){
-          const rawCanvas=makeScaledCanvas(botRaw, botRaw.naturalWidth, botRaw.naturalHeight); // 1:1
-          // scale to style width first (for consistent texture), then rotate, then set height = drawW
-          const scaledToStyle=makeScaledCanvas(botRaw, drawW, Math.round(botRaw.naturalHeight*(drawW/botRaw.naturalWidth)));
-          const rotated=rotateLeftCanvas(scaledToStyle);
-          hTile=scaleCanvasToHeight(rotated, drawW); // thickness = drawW
-        }
+        if(bot && bot.naturalWidth){ hTile = (function(){ const scaled=makeScaledCanvas(bot, drawW, Math.round(bot.naturalHeight*(drawW/bot.naturalWidth))); const rotated=rotateLeftCanvas(scaled); return scaleCanvasToHeight(rotated, drawW); })(); }
 
         Styles.push({ name:cfg.name, bottom, top:topset, drawW, hTile });
       }
@@ -613,3 +590,4 @@
 </script>
 </body>
 </html>
+
