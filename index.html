@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.80</title>
+<title>ROCKET MO — v1.81</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -90,7 +90,7 @@
 
 <script>
 (() => {
-  const VERSION='1.80';
+  const VERSION='1.81';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   const W=1920,H=1080;
@@ -223,27 +223,17 @@
     if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH); const remain=bottomH-capH; if(remain>0) drawBodyTiled(g,body,0,by+capH,remain,w,"bottomDown"); }
     return c;
   }
-
-  /* -------- FIXED: rotate the BODY tile (not the raw bottom image) -------- */
   function makeHorizontalSprite(sty,len){
-    const body=sty.bottom.body;                 // seamless vertical body (width == drawW)
-    const thick=body.width;                     // desired thickness for horizontal
+    const body=sty.bottom.body;
+    const thick=body.width;
     const tile=document.createElement('canvas');
-    tile.width=body.height;                     // after rotation, this is length per tile
-    tile.height=thick;                          // exact thickness (no scaling)
+    tile.width=body.height;
+    tile.height=thick;
     const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
-    // Rotate -90° and paint the body tile
-    tg.save();
-    tg.translate(0, tile.height);               // draw with left-bottom as origin
-    tg.rotate(-Math.PI/2);
-    tg.drawImage(body, 0,0);                    // no scaling -> no squashing
-    tg.restore();
-
-    // Build final bar sprite by tiling across 'len'
+    tg.save(); tg.translate(0, tile.height); tg.rotate(-Math.PI/2); tg.drawImage(body,0,0); tg.restore();
     const c=document.createElement('canvas'); c.width=len; c.height=thick;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    let x=0;
-    while(x+tile.width<=len){ g.drawImage(tile,x,0); x+=tile.width; }
+    let x=0; while(x+tile.width<=len){ g.drawImage(tile,x,0); x+=tile.width; }
     const rem=len-x; if(rem>0) g.drawImage(tile,0,0,rem,tile.height,x,0,rem,tile.height);
     return c;
   }
@@ -277,6 +267,7 @@
   }
 
   let patternMode='VERT', vertSpawned=0, hLeft=0, nextSpawnPx=FIRST_VERTICAL_LEAD;
+
   function stepSpawner(dt){
     nextSpawnPx-=SCROLL_PPS*dt;
     while(nextSpawnPx<=0){
@@ -396,7 +387,7 @@
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
       specs2:[["Specification","Standard Dimensions"],["Width","24, 30, 36\""],["Depth","7, 8, 9, 10, 11, 12, 13, 14, 15, 16\""],["Height","30, 31, …, 108\""],["Shelf Load Capacity","Up to 50 psf"]] },
     { title:"SMARTSHELF (FIXED, FULL DEPTH)", img:"assets/pipe2.png",
-      blurb:"Montel's patented SmartShelf is the most versatile storage shelving system available today. This innovative 4-post shelving offers complete flexibility, accommodating items of all shapes and sizes. It is also designed for easy assembly and reconfiguration.",
+      blurb:"Montel's patented SmartShelf is the most versatile storage shelving system available today...",
       specs2:[["Specification","Standard Dimensions"],["Width","24, 30, 36, 1M, 42, 48, 54\""],["Depth","12, 13, 15, 16, 18, 20, 24, 30, 36\""],["Height","30, 31, …, 120\""],["Frame Load Capacity","Up to 2,500 lbs per frame"],["Shelf Load Capacity","Up to 500 lbs per shelf"]] },
     { title:"4D Wide Span", img:"assets/pipe3.png",
       blurb:"Montel’s 4D Wide Span semi-industrial racking offers the ultimate solution for storing large, heavy items with ease...",
@@ -495,7 +486,7 @@
     }catch(_){ rebuildStyles(); }
   })();
 
-  let state='title', restartLocked=false;
+  // ---------- state now defined only once ----------
   showTitle();
 
 })();
