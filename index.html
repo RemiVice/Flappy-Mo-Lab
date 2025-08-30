@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v2.03</title>
+<title>ROCKET MO — v2.04</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -111,7 +111,7 @@
 
 <script>
 (() => {
-  const VERSION='2.03';
+  const VERSION='2.04';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -224,10 +224,10 @@
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
   const BUFFER_PIXELS = Math.round(W*0.04);          // before/after trio
-  const H_GAP_TIME    = 0.90;                         // seconds of travel time between bars
+  const H_GAP_TIME    = 0.90;                         // seconds between bars (time-based)
   const H_GAP_MIN     = Math.round((H*0.069)*2.2);    // >= ~2.2x bird width
   const H_LANES       = [ Math.round(H*0.30), Math.round(H*0.52), Math.round(H*0.74) ];
-  const TRIO_ORDER    = [0,2,0]; // exact "- _ -" => top, bottom, top
+  // order is now RANDOM every trio (0=top,1=mid,2=bottom)
 
   let worldScroll=0;
   let xCursor=W+FIRST_VERTICAL_LEAD;
@@ -288,20 +288,26 @@
     }
   }
 
+  function randomTrioOrder(){
+    // Return three lane indices (0=top,1=mid,2=bottom). Repeats allowed.
+    return [randInt(0,2), randInt(0,2), randInt(0,2)];
+  }
+
   function spawnHorizontalTrio(){
     const startAfter = Math.max(xCursor, maxVerticalRightEdge(xCursor)) + BUFFER_PIXELS;
     const [s1,s2,s3]=pickDistinctStyles(3);
 
     const dynamicGap = Math.max(Math.round(SCROLL_PPS * H_GAP_TIME), H_GAP_MIN);
+    const order = randomTrioOrder();
 
     const x1 = startAfter;
-    const len1 = scheduleHorizontalSingle(x1, TRIO_ORDER[0], s1);
+    const len1 = scheduleHorizontalSingle(x1, order[0], s1);
 
     const x2 = x1 + len1 + dynamicGap;
-    const len2 = scheduleHorizontalSingle(x2, TRIO_ORDER[1], s2);
+    const len2 = scheduleHorizontalSingle(x2, order[1], s2);
 
     const x3 = x2 + len2 + dynamicGap;
-    const len3 = scheduleHorizontalSingle(x3, TRIO_ORDER[2], s3);
+    const len3 = scheduleHorizontalSingle(x3, order[2], s3);
 
     const after = x3 + len3 + BUFFER_PIXELS;
     reservedUntilX = after;
@@ -334,6 +340,7 @@
   const lastBadge=document.getElementById('lastBadge'); const godPill=document.getElementById('godPill');
   let score=0, lastScore=0; let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
 
+  // GOD toggle (progress persists; best stays in localStorage)
   let godMode=false, godTapCount=0; const GOD_TAPS=10;
   function setGodMode(on){ godMode=!!on; godPill.classList.toggle('hidden', !godMode); }
   lastBadge.addEventListener('click', (e)=>{ e.stopPropagation(); godTapCount++; if(godTapCount>=GOD_TAPS){ setGodMode(!godMode); godTapCount=0; } }, {passive:false});
@@ -431,7 +438,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* Systems (unchanged data) */
+  /* System info content unchanged (omitted for brevity in comments, preserved in code) */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -551,8 +558,8 @@
         const bottomSet=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom);
         const topSet=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom);
 
-        // Horizontal single: WHOLE bottom PNG, rotated 90° left, scaled thickness=drawW
-        let hTile=null;
+        // Horizontal single: WHOLE bottom PNG, rotated 90° left, thickness = drawW
+        let hTile;
         if(bot && bot.naturalWidth){
           const base=makeScaledCanvas(bot, drawW, Math.round(bot.naturalHeight*(drawW/bot.naturalWidth)));
           const rotated=rotateLeftCanvas(base);
