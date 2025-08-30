@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v2.01</title>
+<title>ROCKET MO — v2.02</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -111,7 +111,7 @@
 
 <script>
 (() => {
-  const VERSION='2.01';
+  const VERSION='2.02';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -189,7 +189,7 @@
   function drawBackground(){ if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; } if(!bgCache) bgCache=buildBgCache(); ctx.drawImage(bgCache,0,0); }
   function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
-  /* Pipe art build helpers */
+  /* Pipe styles and art */
   const PIPE_STYLES_CFG=[
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -201,7 +201,13 @@
     { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
   ];
   const Raw={ bottoms:[], tops:[] }, Styles=[];
-  function makeScaledCanvas(img,w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); } return c; }
+
+  function makeScaledCanvas(img,w,h){
+    const c=document.createElement('canvas'); c.width=w; c.height=h;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); }
+    return c;
+  }
   function buildCapBodyPx(img,drawW,capPxSrc,capFrom="top"){
     if(!img){ const ph=makeScaledCanvas(null,drawW,120); return {cap:ph, body:ph}; }
     const scale=drawW/(img.naturalWidth||img.width);
@@ -217,17 +223,15 @@
     return { cap, body };
   }
 
-  /* --- helpers for “whole PNG” horizontal bars --- */
+  // rotate full canvas 90° left
   function rotateLeftCanvas(srcCanvas){
     const c=document.createElement('canvas');
-    c.width=srcCanvas.height;
-    c.height=srcCanvas.width;
+    c.width=srcCanvas.height;  c.height=srcCanvas.width;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    g.translate(0, c.height);
-    g.rotate(-Math.PI/2);
-    g.drawImage(srcCanvas,0,0);
+    g.translate(0,c.height); g.rotate(-Math.PI/2); g.drawImage(srcCanvas,0,0);
     return c;
   }
+  // scale to a specific height (thickness)
   function scaleCanvasToHeight(srcCanvas, targetH){
     const scale=targetH/srcCanvas.height;
     const w=Math.max(1,Math.round(srcCanvas.width*scale));
@@ -236,41 +240,15 @@
     g.drawImage(srcCanvas,0,0,w,targetH);
     return c;
   }
-  function makeHorizontalSpriteWhole(tileCanvas, minLen){
-    if(!tileCanvas){
-      const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(minLen)); c.height=64;
-      const g=c.getContext('2d'); g.fillStyle="#2e8b57"; g.fillRect(0,0,c.width,c.height); return c;
-    }
-    const n=Math.max(1, Math.ceil(minLen / tileCanvas.width));
-    const c=document.createElement('canvas'); c.width=n*tileCanvas.width; c.height=tileCanvas.height;
-    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    for(let i=0,x=0;i<n;i++,x+=tileCanvas.width) g.drawImage(tileCanvas,x,0);
-    return c;
-  }
-  /* ----------------------------------------------- */
-
-  function drawBodyTiled(g,tile,x,yStart,totalH,w,mode){
-    const th=tile.height; if(totalH<=0||th<=0) return;
-    if(mode==="topUp"){ let y=totalH-th; while(y>=0){ g.drawImage(tile,x,y,w,th); y-=th; } const rem=totalH%th; if(rem>0) g.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem); }
-    else { let y=yStart, end=yStart+totalH; while(y+th<=end){ g.drawImage(tile,x,y,w,th); y+=th; } const left=end-y; if(left>0) g.drawImage(tile,0,0,tile.width,left,x,y,w,left); }
-  }
-  function makeVerticalSprite(sty,top,gap,w){
-    const c=document.createElement('canvas'); c.width=w; c.height=H; const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    if(top>0){ const cap=sty.top.cap, body=sty.top.body; const capH=Math.min(cap.height,top), bodyH=top-capH; if(bodyH>0) drawBodyTiled(g,body,0,0,bodyH,w,"topUp"); g.drawImage(cap,0,top-capH,w,capH); }
-    const by=top+gap, bottomH=H-by;
-    if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH); const remain=bottomH-capH; if(remain>0) drawBodyTiled(g,body,0,by+capH,remain,w,"bottomDown"); }
-    return c;
-  }
 
   /* WORLD + scheduler */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
   const BUFFER_PIXELS = Math.round(W*0.04);
-  const H_BAR_MINLEN  = Math.round(VERTICAL_X_GAP*0.80); // min target per bar
-  const H_GAP         = Math.round(W*0.012);             // small visual gap between bars
+  const H_GAP         = Math.round(W*0.016);             // gap between single bars
   const H_LANES       = [ Math.round(H*0.30), Math.round(H*0.52), Math.round(H*0.74) ];
-  const TRIO_ORDER    = [0,2,1]; // top, bottom, mid  => "- _ -"
+  const TRIO_ORDER    = [0,2,1]; // top, bottom, mid -> "- _ -"
 
   let worldScroll=0;
   let xCursor=W+FIRST_VERTICAL_LEAD;
@@ -301,40 +279,57 @@
     obstacles.push({ type:'V', x:xPos, top, gap, w, styleIndex:idx, scored:false, sprite:makeVerticalSprite(sty,top,gap,w) });
   }
 
-  // Build style caches (including horizontal tiles)
-  function rotateLeftFromRaw(raw, drawW){
-    const scaledToStyle=makeScaledCanvas(raw, drawW, Math.round(raw.naturalHeight*(drawW/raw.naturalWidth)));
-    const rotated=rotateLeftCanvas(scaledToStyle);
-    return scaleCanvasToHeight(rotated, drawW); // thickness = drawW
+  function drawBodyTiled(g,tile,x,yStart,totalH,w,mode){
+    const th=tile.height; if(totalH<=0||th<=0) return;
+    if(mode==="topUp"){ let y=totalH-th; while(y>=0){ g.drawImage(tile,x,y,w,th); y-=th; } const rem=totalH%th; if(rem>0) g.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem); }
+    else { let y=yStart, end=yStart+totalH; while(y+th<=end){ g.drawImage(tile,x,y,w,th); y+=th; } const left=end-y; if(left>0) g.drawImage(tile,0,0,tile.width,left,x,y,w,left); }
+  }
+  function makeVerticalSprite(sty,top,gap,w){
+    const c=document.createElement('canvas'); c.width=w; c.height=H; const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    if(top>0){ const cap=sty.top.cap, body=sty.top.body; const capH=Math.min(cap.height,top), bodyH=top-capH; if(bodyH>0) drawBodyTiled(g,body,0,0,bodyH,w,"topUp"); g.drawImage(cap,0,top-capH,w,capH); }
+    const by=top+gap, bottomH=H-by;
+    if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH); const remain=bottomH-capH; if(remain>0) drawBodyTiled(g,body,0,by+capH,remain,w,"bottomDown"); }
+    return c;
+  }
+
+  function scheduleHorizontalSingle(xPos, laneIndex, styleIndex){
+    const sty=Styles[styleIndex];
+    const sprite=sty.hTile;              // EXACTLY one full rotated PNG (no repeats)
+    obstacles.push({
+      type:'H', x:xPos, y:H_LANES[laneIndex],
+      len:sprite.width, thick:sprite.height,
+      styleIndex, sprite, scored:false
+    });
+    return sprite.width; // return its true length for spacing
+  }
+
+  function pickDistinctStyles(n){
+    const chosen=[];
+    while(chosen.length<n && Styles.length){
+      const idx=Math.floor(Math.random()*Styles.length);
+      if(!chosen.includes(idx)) chosen.push(idx);
+    }
+    while(chosen.length<n) chosen.push(0); // fallback if fewer styles somehow
+    return chosen;
   }
 
   function spawnHorizontalTrio(){
     const startAfter = Math.max(xCursor, maxVerticalRightEdge(xCursor)) + BUFFER_PIXELS;
 
-    // pick styles for each bar
-    const s1=Math.floor(Math.random()*Styles.length);
-    const s2=Math.floor(Math.random()*Styles.length);
-    const s3=Math.floor(Math.random()*Styles.length);
+    const [s1,s2,s3]=pickDistinctStyles(3);
 
-    // build sprites to know true lengths
-    const spr1=makeHorizontalSpriteWhole(Styles[s1].hTile, H_BAR_MINLEN);
-    const spr2=makeHorizontalSpriteWhole(Styles[s2].hTile, H_BAR_MINLEN);
-    const spr3=makeHorizontalSpriteWhole(Styles[s3].hTile, H_BAR_MINLEN);
+    const x1 = startAfter;
+    const len1 = scheduleHorizontalSingle(x1, TRIO_ORDER[0], s1);
 
-    const len1=spr1.width, len2=spr2.width, len3=spr3.width;
+    const x2 = x1 + len1 + H_GAP;
+    const len2 = scheduleHorizontalSingle(x2, TRIO_ORDER[1], s2);
 
-    const x1=startAfter;
-    const x2=x1 + len1 + H_GAP;
-    const x3=x2 + len2 + H_GAP;
+    const x3 = x2 + len2 + H_GAP;
+    const len3 = scheduleHorizontalSingle(x3, TRIO_ORDER[2], s3);
 
-    const after = x3 + len3 + BUFFER_PIXELS; // corridor ends after last bar
-
+    const after = x3 + len3 + BUFFER_PIXELS;
     reservedUntilX = after;
     purgeVerticalsInCorridor(x1, after);
-
-    obstacles.push({type:'H', x:x1, y:H_LANES[TRIO_ORDER[0]], len:len1, thick:spr1.height, styleIndex:s1, sprite:spr1, scored:false});
-    obstacles.push({type:'H', x:x2, y:H_LANES[TRIO_ORDER[1]], len:len2, thick:spr2.height, styleIndex:s2, sprite:spr2, scored:false});
-    obstacles.push({type:'H', x:x3, y:H_LANES[TRIO_ORDER[2]], len:len3, thick:spr3.height, styleIndex:s3, sprite:spr3, scored:false});
 
     xCursor = after;
     spawnMode = MODE_VERT;
@@ -358,7 +353,7 @@
         verticalCount++;
         if(verticalCount>=10){ verticalCount=0; spawnMode=MODE_HSEG; }
       } else {
-        spawnHorizontalTrio(); // exact widths, no overlap
+        spawnHorizontalTrio();
       }
     }
   }
@@ -378,16 +373,22 @@
   function collideAndScore(){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
+
     for(const o of obstacles){
       if(o.type==='V'){
         const overlapX=(bx2>o.x)&&(bx1<o.x+o.w);
         if(overlapX){
           const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
-          if(by1<safeTop || by2>safeBottom){ if(!godMode){ endGame(o.styleIndex); return true; } }
+          if(by1<safeTop || by2>safeBottom){
+            if(!godMode){ endGame(o.styleIndex); return true; }
+          }
         }
         if(!o.scored && (o.x+o.w)<bx1){
           o.scored=true;
-          if(!godMode){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
+          if(!godMode){
+            score++; scoreEl.textContent=score;
+            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+          }
         }
       } else {
         const rx1=o.x, rx2=o.x+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
@@ -395,7 +396,10 @@
         if(overlap){ if(!godMode){ endGame(o.styleIndex); return true; } }
         if(!o.scored && rx2<bx1){
           o.scored=true;
-          if(!godMode){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
+          if(!godMode){
+            score++; scoreEl.textContent=score;
+            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+          }
         }
       }
     }
@@ -425,7 +429,7 @@
     obstacles.length=0; worldScroll=0;
     xCursor=W+FIRST_VERTICAL_LEAD; verticalCount=0; spawnMode=MODE_VERT; reservedUntilX=0;
 
-    ensureAhead();
+    ensureAhead();            // seed world
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -459,7 +463,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* Systems content */
+  /* Systems panel (unchanged content) */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -501,6 +505,13 @@
       ] } }
   ];
   function fillSystemPanel(i){
+    const sysImg=document.getElementById('sysImg');
+    const sysInfoBox=document.getElementById('sysInfoBox');
+    const sysTitle=document.getElementById('sysTitle');
+    const sysBlurb=document.getElementById('sysBlurb');
+    const sysSpecsBox=document.getElementById('sysSpecsBox');
+    const sysSpecs=document.getElementById('sysSpecs');
+
     if(typeof i==='number' && SYSTEMS[i]){
       const info=SYSTEMS[i];
       sysTitle.textContent=info.title||`System ${i+1}`;
@@ -558,6 +569,7 @@
         ...PIPE_STYLES_CFG.flatMap(s=>[loadImageWithTimeout(s.bottom.url), loadImageWithTimeout(s.top.url)])
       ]);
       birdSprite=sprite||null; birdFallbackImg=(!birdSprite && fallback)?fallback:null; bgImg=bg||null;
+
       const bottoms=[], tops=[];
       for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=rest[i*2]||null; tops[i]=rest[i*2+1]||null; }
       Raw.bottoms=bottoms; Raw.tops=tops;
@@ -567,14 +579,21 @@
         const cfg=PIPE_STYLES_CFG[i];
         const bot=Raw.bottoms[i], top=Raw.tops[i];
         const drawW=Math.round(PIPE_W*(cfg.scale||1));
-        const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom);
-        const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom);
 
-        // Horizontal tile from the WHOLE bottom PNG, rotated 90° left, thickness = drawW
+        const bottomSet=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom);
+        const topSet=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom);
+
+        // Horizontal tile: WHOLE bottom PNG -> scaled to drawW width, rotated 90° left -> thickness = drawW
         let hTile=null;
-        if(bot && bot.naturalWidth){ hTile = (function(){ const scaled=makeScaledCanvas(bot, drawW, Math.round(bot.naturalHeight*(drawW/bot.naturalWidth))); const rotated=rotateLeftCanvas(scaled); return scaleCanvasToHeight(rotated, drawW); })(); }
+        if(bot && bot.naturalWidth){
+          const base=makeScaledCanvas(bot, drawW, Math.round(bot.naturalHeight*(drawW/bot.naturalWidth)));
+          const rotated=rotateLeftCanvas(base);
+          hTile=scaleCanvasToHeight(rotated, drawW); // final single-bar sprite
+        } else {
+          hTile=makeScaledCanvas(null, drawW, drawW);
+        }
 
-        Styles.push({ name:cfg.name, bottom, top:topset, drawW, hTile });
+        Styles.push({ name:cfg.name, bottom:bottomSet, top:topSet, drawW, hTile });
       }
       if(!Styles.length){
         const drawW=PIPE_W, ph=makeScaledCanvas(null,drawW,120);
@@ -590,4 +609,3 @@
 </script>
 </body>
 </html>
-
