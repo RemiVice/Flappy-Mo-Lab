@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.82</title>
+<title>ROCKET MO — v1.83</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -99,10 +99,10 @@
 
 <script>
 (() => {
-  const VERSION='1.82';
+  const VERSION='1.83';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
-  /* Canvas + fit */
+  /* Canvas fit */
   const W=1920,H=1080;
   const canvas=document.getElementById('game');
   const ctx=canvas.getContext('2d',{alpha:false});
@@ -116,14 +116,13 @@
   window.visualViewport&&visualViewport.addEventListener('resize',fitCSS,{passive:true});
   fitCSS();
 
-  /* Orientation overlay (informational) */
   function checkOrientation(){
     const rb=document.getElementById('rotBlock');
     rb.classList.toggle('show', isMobile && innerWidth<innerHeight);
   }
   addEventListener('resize',checkOrientation,{passive:true}); checkOrientation();
 
-  /* Fixed-step physics for smoothness on 60Hz */
+  /* Fixed-step physics */
   let physicsHz=isMobile?90:60;
   let STEP=1/physicsHz,accumulator=0,lastTs=performance.now();
   const MAX_FRAME_DT=0.12;
@@ -141,7 +140,7 @@
   const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
   const BIRD_INSET=8, GAP_FORGIVE=12;
 
-  /* Bird sprite (user prefers scale = 1) */
+  /* Bird sprite (locked to scale 1 as requested) */
   const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12;
   const BIRD_SPRITE_SCALE=1;
   const BIRD_ANCHOR_X_FRAC=0.58, BIRD_ANCHOR_Y_FRAC=0.50;
@@ -175,7 +174,7 @@
     }
   };
 
-  /* Images */
+  /* Assets */
   function loadImageWithTimeout(src,timeout=6000){
     return new Promise((res)=>{ if(!src){ res(null); return; }
       const img=new Image(); img.referrerPolicy='no-referrer';
@@ -196,7 +195,7 @@
   }
   function drawBackground(){ if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; } if(!bgCache) bgCache=buildBgCache(); ctx.drawImage(bgCache,0,0); }
 
-  /* Pipe styles (tops/bottoms) */
+  /* Pipe styles */
   const PIPE_STYLES_CFG=[
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
@@ -208,7 +207,6 @@
     { name:"Pipe 8", bottom:{url:"assets/pipe8-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe8-top.png", capPx:64, capFrom:"bottom"}, scale:1.4 }
   ];
   const Raw={ bottoms:[], tops:[] }, Styles=[];
-
   function makeScaledCanvas(img,w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); g.imageSmoothingEnabled=true; if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); } return c; }
   function buildCapBodyPx(img,drawW,capPxSrc,capFrom="top"){
     if(!img){ const ph=document.createElement("canvas"); ph.width=drawW; ph.height=120; const g=ph.getContext("2d"); g.imageSmoothingEnabled=true; g.fillStyle="#2e8b57"; g.fillRect(0,0,drawW,120); return {cap:ph, body:ph}; }
@@ -248,14 +246,12 @@
     if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH); const remain=bottomH-capH; if(remain>0) drawBodyTiled(g,body,0,by+capH,remain,w,"bottomDown"); }
     return c;
   }
-
-  /* Rotate the vertical BODY to build a clean horizontal bar (no squashing) */
   function makeHorizontalSprite(sty,len){
     const body=sty.bottom.body;
     const thick=body.width;
     const tile=document.createElement('canvas');
-    tile.width=body.height;   // length per tile after rotation
-    tile.height=thick;        // exact thickness
+    tile.width=body.height;
+    tile.height=thick;
     const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
     tg.save(); tg.translate(0, tile.height); tg.rotate(-Math.PI/2); tg.drawImage(body,0,0); tg.restore();
 
@@ -266,15 +262,23 @@
     return c;
   }
 
-  /* Obstacles + spawning */
+  /* Obstacles + WORLD-CURSOR SPAWNER (no timers, no overlap) */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  /* Spacing rules for horizontal sets */
-  const H_BUFFER_BEFORE=Math.round(W*0.20);   // 0.2W BEFORE the first horizontal
-  const H_BUFFER_AFTER =Math.round(W*0.20);   // 0.2W AFTER the last horizontal
-  const H_BETWEEN      =Math.round(W*0.25);   // between horizontal bars
-  const H_BAR_LEN      =Math.round(W*0.55);   // length of a horizontal bar
+  const H_BUFFER_BEFORE=Math.round(W*0.20);
+  const H_BUFFER_AFTER =Math.round(W*0.20);
+  const H_BETWEEN      =Math.round(W*0.25);
+  const H_BAR_LEN      =Math.round(W*0.55);
+
+  // world scroll (how far we’ve moved to the left)
+  let worldScroll=0;
+
+  // spawnCursor is the X (in screen coordinates) where next obstacle will appear.
+  // It moves left with the world so the “distance ahead” remains stable.
+  let spawnCursor = W + FIRST_VERTICAL_LEAD;
+
+  let patternMode='VERT', vertSpawned=0, hLeft=0;
 
   function spawnVerticalAt(xPos){
     if(!Styles.length) return;
@@ -291,50 +295,49 @@
 
     const idx=Math.floor(Math.random()*Styles.length);
     const sty=Styles[idx], w=sty.drawW;
+
     obstacles.push({ type:'V', x:xPos, top, gap, w, styleIndex:idx, scored:false, sprite:makeVerticalSprite(sty,top,gap,w) });
   }
 
-  function spawnOneHorizontal(){
+  function spawnOneHorizontalAt(xPos){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx];
     const sprite=makeHorizontalSprite(sty,H_BAR_LEN);
     const thick=sprite.height;
     const margin=Math.round(H*0.12);
     const yMid=randInt(margin + thick/2, H - (margin + thick/2));
-    obstacles.push({ type:'H', x:W, y:yMid, len:H_BAR_LEN, thick, styleIndex:idx, sprite, scored:false });
+    obstacles.push({ type:'H', x:xPos, y:yMid, len:H_BAR_LEN, thick, styleIndex:idx, sprite, scored:false });
   }
 
-  let patternMode='VERT', vertSpawned=0, hLeft=0, nextSpawnPx=FIRST_VERTICAL_LEAD;
+  // Always keep obstacles laid out until we have ~2.5 screens ahead
+  const AHEAD_LIMIT = Math.round(W*2.5);
 
-  function stepSpawner(dt){
-    nextSpawnPx-=SCROLL_PPS*dt;
-    while(nextSpawnPx<=0){
+  function ensureAhead(){
+    while(spawnCursor < W + AHEAD_LIMIT){
       if(patternMode==='VERT'){
-        spawnVerticalAt(W);
-        vertSpawned++; nextSpawnPx+=VERTICAL_X_GAP;
-        if(vertSpawned>=10){         // after 10 verticals, schedule horizontals
+        spawnVerticalAt(spawnCursor);
+        spawnCursor += VERTICAL_X_GAP;
+        vertSpawned++;
+        if(vertSpawned>=10){
           patternMode='HSET';
           hLeft=3;
-          nextSpawnPx+=H_BUFFER_BEFORE;  // leave room BEFORE the horizontal set
+          spawnCursor += H_BUFFER_BEFORE;  // gap BEFORE first horizontal
         }
-      }else{
-        spawnOneHorizontal(); hLeft--;
-        nextSpawnPx+=(hLeft>0?H_BETWEEN:H_BUFFER_AFTER);  // between bars, then AFTER buffer
+      } else {
+        spawnOneHorizontalAt(spawnCursor);
+        hLeft--;
+        spawnCursor += (hLeft>0 ? H_BETWEEN : H_BUFFER_AFTER); // between bars / AFTER group
         if(hLeft<=0){ patternMode='VERT'; vertSpawned=0; }
       }
     }
   }
 
-  function drawObstaclesInterpolated(leftover){
-    for(const o of obstacles){
-      if(o.type==='V'){
-        const xR=(state==='playing')?(o.x - SCROLL_PPS*leftover):o.x;
-        if(o.sprite) ctx.drawImage(o.sprite,xR,0,o.w,H);
-      } else {
-        const xR=(state==='playing')?(o.x - SCROLL_PPS*leftover):o.x;
-        ctx.drawImage(o.sprite, xR, o.y - o.thick/2);
-      }
-    }
+  function moveWorld(dt){
+    const dx = SCROLL_PPS*dt;
+    worldScroll += dx;
+    for(const o of obstacles){ o.x -= dx; }
+    spawnCursor -= dx;       // keep the ahead-distance stable
   }
+
   function cleanupObstacles(){
     for(let i=obstacles.length-1;i>=0;i--){
       const o=obstacles[i];
@@ -342,7 +345,7 @@
     }
   }
 
-  /* Score + HUD */
+  /* HUD + scoring */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
   let score=0, lastScore=0;
   let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
@@ -352,18 +355,17 @@
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
     for(const o of obstacles){
       if(o.type==='V'){
-        const xR=o.x - SCROLL_PPS*leftover;
-        const overlapX=(bx2>xR)&&(bx1<xR+o.w);
+        const overlapX=(bx2>o.x)&&(bx1<o.x+o.w);
         if(overlapX){
           const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
           if(by1<safeTop || by2>safeBottom){ endGame(o.styleIndex); return true; }
         }
-        if(!o.scored && (xR+o.w)<bx1){
+        if(!o.scored && (o.x+o.w)<bx1){
           o.scored=true; score++; scoreEl.textContent=score;
           if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
         }
       } else {
-        const xR=o.x - SCROLL_PPS*leftover, rx1=xR, rx2=xR+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
+        const rx1=o.x, rx2=o.x+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
         const overlap=(bx2>rx1)&&(bx1<rx2)&&(by2>ry1)&&(by1<ry2);
         if(overlap){ endGame(o.styleIndex); return true; }
         if(!o.scored && rx2<bx1){
@@ -390,7 +392,15 @@
     if(state==='playing') return;
     state='playing'; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
-    obstacles.length=0; patternMode='VERT'; vertSpawned=0; hLeft=0; nextSpawnPx=FIRST_VERTICAL_LEAD;
+
+    // reset world + spawner
+    obstacles.length=0;
+    worldScroll=0;
+    spawnCursor = W + FIRST_VERTICAL_LEAD;
+    patternMode='VERT'; vertSpawned=0; hLeft=0;
+
+    ensureAhead(); // lay out the first batch immediately
+
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -425,7 +435,7 @@
     }
   });
 
-  /* Game Over data (systems) */
+  /* Game Over data */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -501,7 +511,7 @@
 
   function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
-  /* Main loop */
+  /* Loop */
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
     accumulator+=frameDt;
@@ -509,35 +519,37 @@
       if(state==='playing'){
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
 
-        // vertical wrap at top/bottom (toroidal)
         const topWrap=-bird.h*TOP_OVERLAP_FRAC, bottomWrap=H+bird.h*BOTTOM_OVERLAP_FRAC;
         if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
         else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
 
-        stepSpawner(STEP);
-        for(const o of obstacles){ o.x-=SCROLL_PPS*STEP; }
+        moveWorld(STEP);      // scroll everything and the spawn cursor
+        ensureAhead();        // make sure we always have future obstacles laid out
         cleanupObstacles();
         bird.animTime+=STEP;
       }
       accumulator-=STEP;
     }
-    const leftover=(state==='playing')?accumulator:0;
 
     ctx.clearRect(0,0,W,H);
     drawBackground();
 
-    bird.yRender=bird.y + (state==='playing' ? bird.v*leftover + 0.5*G*leftover*leftover : 0);
-    drawObstaclesInterpolated(leftover);
+    bird.yRender=bird.y;
+    // draw obstacles at their current screen-space x
+    for(const o of obstacles){
+      if(o.type==='V'){ if(o.sprite) ctx.drawImage(o.sprite,o.x,0,o.w,H); }
+      else { ctx.drawImage(o.sprite, o.x, o.y - o.thick/2); }
+    }
     bird.draw();
 
     if(state!=='title') drawVersionTag();
-    if(state==='playing') collideAndScore(leftover);
+    if(state==='playing') collideAndScore(0);
 
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
 
-  /* Boot images & show title */
+  /* Boot assets & enter title */
   (async ()=>{
     try{
       const [sprite,fallback,bg,...rest]=await Promise.all([
@@ -554,7 +566,69 @@
   })();
 
   /* Start/Restart wiring */
+  const splash=document.getElementById('splash');
+  const gameOverCard=document.getElementById('gameOverCard');
+  const finalScoreP=document.getElementById('finalScoreP');
+
+  let state='title', restartLocked=false;
+
+  function showTitle(){ state='title'; restartLocked=false;
+    splash.classList.remove('hidden'); gameOverCard.classList.add('hidden');
+    bird.reset();
+    score=0; document.getElementById('scoreVal').textContent='0';
+  }
   showTitle();
+
+  function startGame(){
+    if(state==='playing') return;
+    state='playing'; restartLocked=false;
+
+    // reset scoring
+    const lastScoreEl=document.getElementById('lastVal');
+    lastScoreEl.textContent=score;
+    score=0; document.getElementById('scoreVal').textContent='0';
+
+    // reset world/spawn
+    obstacles.length=0;
+    worldScroll=0;
+    spawnCursor = W + FIRST_VERTICAL_LEAD;
+    patternMode='VERT'; vertSpawned=0; hLeft=0;
+    ensureAhead();
+
+    bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
+  }
+  function endGame(hitStyleIdx){
+    if(state==='gameover') return;
+    state='gameover'; bird.v=0;
+    finalScoreP.textContent=`Score: ${score} • Best: ${Number(localStorage.getItem('flappyMoBest')||0)}`;
+    fillSystemPanel(hitStyleIdx);
+    gameOverCard.classList.remove('hidden'); gameOverCard.scrollTop=0;
+    restartLocked=true; setTimeout(()=>{ restartLocked=false; },900);
+  }
+
+  function globalPointerStart(e){
+    if(e.target.closest('#gameOverCard')) return;
+    if(state==='title'){ startGame(); return; }
+    if(state==='playing'){ e.preventDefault(); bird.flap(); return; }
+    if(state==='gameover' && !restartLocked){ startGame(); }
+  }
+  document.addEventListener('pointerdown', globalPointerStart, {passive:false, capture:true});
+  splash.addEventListener('click', ()=>{ if(state!=='playing') startGame(); }, {passive:true});
+  splash.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.code==='Space'||e.key===' '){ e.preventDefault(); startGame(); }});
+  splash.setAttribute('tabindex','0');
+  document.addEventListener('keydown',(e)=>{
+    if(e.repeat) return;
+    if(e.code==='Space'||e.key===' '){
+      if(state==='title') startGame();
+      else if(state==='gameover'){ if(!restartLocked) startGame(); }
+      else bird.flap();
+      e.preventDefault();
+    }
+    if(e.key==='Enter'){
+      if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame();
+    }
+  });
+
 })();
 </script>
 </body>
