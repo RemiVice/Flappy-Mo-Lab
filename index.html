@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.98</title>
+<title>ROCKET MO — v1.99</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -111,7 +111,7 @@
 
 <script>
 (() => {
-  const VERSION='1.98';
+  const VERSION='1.99';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -133,7 +133,7 @@
   const G=4800*SPEED_MULT, LIFT_V0=-1250*SPEED_MULT, MAX_FALL=2200*SPEED_MULT;
   const baseScroll=isMobile?480:440; const SCROLL_PPS=baseScroll*SPEED_MULT;
 
-  const VERTICAL_X_GAP=Math.round(SCROLL_PPS*1.8);   // spacing between vertical pipes
+  const VERTICAL_X_GAP=Math.round(SCROLL_PPS*1.8);
   const FIRST_VERTICAL_LEAD=VERTICAL_X_GAP;
 
   const PIPE_W=180, GAP_MIN=310, GAP_MAX=450;
@@ -204,7 +204,7 @@
   function makeScaledCanvas(img,w,h){
     const c=document.createElement('canvas'); c.width=w; c.height=h;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); } // safe placeholder
+    if(img) g.drawImage(img,0,0,w,h); else { g.fillStyle="#2e8b57"; g.fillRect(0,0,w,h); }
     return c;
   }
   function buildCapBodyPx(img,drawW,capPxSrc,capFrom="top"){
@@ -221,6 +221,41 @@
     else { cg.drawImage(full,0,scaledH-cap.height,drawW,cap.height,0,0,drawW,cap.height); bg.drawImage(full,0,0,drawW,body.height,0,0,drawW,body.height); }
     return { cap, body };
   }
+
+  /* ------- Horizontal bar builder (fixed) ------- */
+  function rotateCanvas90(src){
+    const c=document.createElement('canvas');
+    c.width=src.height;   // swapped
+    c.height=src.width;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    g.translate(c.width, 0);
+    g.rotate(Math.PI/2);
+    g.drawImage(src,0,0);
+    return c;
+  }
+  function makeHorizontalSprite(sty,len){
+    const body=sty.bottom.body;
+    const rot=rotateCanvas90(body);                  // now oriented horizontally
+    const desiredThick=Math.max(48, Math.round(sty.drawW*0.55));   // consistent thickness
+    const thick=Math.min(desiredThick, rot.height);  // don’t exceed available texture
+
+    // Make a centered strip from the rotated texture
+    const tile=document.createElement('canvas');
+    tile.width=rot.width;
+    tile.height=thick;
+    const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
+    const sy=Math.floor((rot.height - thick)/2);
+    tg.drawImage(rot, 0, sy, rot.width, thick, 0, 0, tile.width, tile.height);
+
+    // Tile across final sprite
+    const c=document.createElement('canvas'); c.width=len; c.height=thick;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    let x=0; while(x+tile.width<=len){ g.drawImage(tile,x,0); x+=tile.width; }
+    const rem=len-x; if(rem>0) g.drawImage(tile,0,0,rem, tile.height, x,0,rem, tile.height);
+    return c;
+  }
+  /* --------------------------------------------- */
+
   function drawBodyTiled(g,tile,x,yStart,totalH,w,mode){
     const th=tile.height; if(totalH<=0||th<=0) return;
     if(mode==="topUp"){ let y=totalH-th; while(y>=0){ g.drawImage(tile,x,y,w,th); y-=th; } const rem=totalH%th; if(rem>0) g.drawImage(tile,0,th-rem,tile.width,rem,x,0,w,rem); }
@@ -233,32 +268,17 @@
     if(bottomH>0){ const cap=sty.bottom.cap, body=sty.bottom.body; const capH=Math.min(cap.height,bottomH); g.drawImage(cap,0,by,w,capH); const remain=bottomH-capH; if(remain>0) drawBodyTiled(g,body,0,by+capH,remain,w,"bottomDown"); }
     return c;
   }
-  function makeHorizontalSprite(sty,len){
-    const body=sty.bottom.body;                   // use body texture for a clean bar
-    const thick=Math.round(body.width*0.58);      // visually slimmer than a vertical
-    const tile=document.createElement('canvas');  // rotate a slice for seamless tiling
-    tile.width=body.height; tile.height=thick;
-    const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
-    tg.save(); tg.translate(0, tile.height); tg.rotate(-Math.PI/2);
-    tg.drawImage(body, 0, Math.max(0,(body.height-thick)), body.width, Math.min(body.height,thick), 0,0, body.height, tile.height);
-    tg.restore();
-    const c=document.createElement('canvas'); c.width=len; c.height=thick;
-    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    let x=0; while(x+tile.width<=len){ g.drawImage(tile,x,0); x+=tile.width; }
-    const rem=len-x; if(rem>0) g.drawImage(tile,0,0,rem,tile.height,x,0,rem,tile.height);
-    return c;
-  }
 
   /* WORLD + scheduler */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  // Tuning to match your mock: concise trio with back-to-back spacing
-  const BUFFER_PIXELS = Math.round(W*0.04);                       // small buffer before/after trios
-  const H_BETWEEN     = Math.round(VERTICAL_X_GAP*0.75);          // spacing between bars in the trio
-  const H_BAR_LEN     = Math.round(VERTICAL_X_GAP*0.80);          // each bar length
+  // Trio tuned for the “- _ -” look
+  const BUFFER_PIXELS = Math.round(W*0.04);
+  const H_BETWEEN     = Math.round(VERTICAL_X_GAP*0.75);
+  const H_BAR_LEN     = Math.round(VERTICAL_X_GAP*0.80);
   const H_LANES       = [ Math.round(H*0.30), Math.round(H*0.52), Math.round(H*0.74) ];
-  const TRIO_ORDER    = [0,2,1]; // pattern: top ( - ), bottom ( _ ), mid ( - )
+  const TRIO_ORDER    = [0,2,1]; // top, bottom, mid
 
   let worldScroll=0;
   let xCursor=W+FIRST_VERTICAL_LEAD;
@@ -269,7 +289,6 @@
   const MODE_VERT='VERT', MODE_HSEG='HSEG';
   let spawnMode=MODE_VERT;
 
-  // corridor reservation to keep verts out of the horizontal segment
   let reservedUntilX=0;
 
   function maxVerticalRightEdge(minX){
@@ -310,13 +329,8 @@
   }
 
   function spawnHorizontalTrio(){
-    // Start after: both the spawn cursor and the last vertical's right edge
     const startAfter = Math.max(xCursor, maxVerticalRightEdge(xCursor)) + BUFFER_PIXELS;
-
-    const x1 = startAfter;
-    const x2 = x1 + H_BETWEEN;
-    const x3 = x2 + H_BETWEEN;
-    const after = x3 + BUFFER_PIXELS;
+    const x1 = startAfter, x2 = x1 + H_BETWEEN, x3 = x2 + H_BETWEEN, after = x3 + BUFFER_PIXELS;
 
     reservedUntilX = after;
     purgeVerticalsInCorridor(x1, after);
@@ -325,7 +339,7 @@
     scheduleHorizontal(x2, TRIO_ORDER[1]);
     scheduleHorizontal(x3, TRIO_ORDER[2]);
 
-    xCursor = after;                // resume spawning after the trio
+    xCursor = after;  // continue after the trio
     spawnMode = MODE_VERT;
   }
 
@@ -334,14 +348,13 @@
     let guard=0;
     while(xCursor < aheadTarget && guard++ < 100){
       if(spawnMode===MODE_VERT){
-        // keep verts out of a reserved corridor
         if(xCursor < reservedUntilX) xCursor = reservedUntilX;
         scheduleVertical(xCursor);
         xCursor += VERTICAL_X_GAP;
         verticalCount++;
         if(verticalCount>=10){ verticalCount=0; spawnMode=MODE_HSEG; }
       } else {
-        spawnHorizontalTrio(); // - _ -
+        spawnHorizontalTrio();
       }
     }
   }
@@ -357,21 +370,12 @@
   let godMode=false;
   let godTapCount=0;
   const GOD_TAPS=10;
-
-  function setGodMode(on){
-    godMode=!!on;
-    godPill.classList.toggle('hidden', !godMode);
-  }
-  lastBadge.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    godTapCount++;
-    if(godTapCount>=GOD_TAPS){ setGodMode(!godMode); godTapCount=0; }
-  }, {passive:false});
+  function setGodMode(on){ godMode=!!on; godPill.classList.toggle('hidden', !godMode); }
+  lastBadge.addEventListener('click', (e)=>{ e.stopPropagation(); godTapCount++; if(godTapCount>=GOD_TAPS){ setGodMode(!godMode); godTapCount=0; } }, {passive:false});
 
   function collideAndScore(){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
-
     for(const o of obstacles){
       if(o.type==='V'){
         const overlapX=(bx2>o.x)&&(bx1<o.x+o.w);
@@ -381,10 +385,7 @@
         }
         if(!o.scored && (o.x+o.w)<bx1){
           o.scored=true;
-          if(!godMode){
-            score++; scoreEl.textContent=score;
-            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
-          }
+          if(!godMode){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
         }
       } else {
         const rx1=o.x, rx2=o.x+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
@@ -392,10 +393,7 @@
         if(overlap){ if(!godMode){ endGame(o.styleIndex); return true; } }
         if(!o.scored && rx2<bx1){
           o.scored=true;
-          if(!godMode){
-            score++; scoreEl.textContent=score;
-            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
-          }
+          if(!godMode){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
         }
       }
     }
@@ -421,12 +419,9 @@
     if(state==='playing') return;
     state='playing'; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
-
     obstacles.length=0; worldScroll=0;
-    xCursor=W+FIRST_VERTICAL_LEAD; verticalCount=0; spawnMode=MODE_VERT;
-    reservedUntilX=0;
-
-    ensureAhead(); // seed
+    xCursor=W+FIRST_VERTICAL_LEAD; verticalCount=0; spawnMode=MODE_VERT; reservedUntilX=0;
+    ensureAhead();
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -460,7 +455,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* Systems content */
+  /* Systems content (unchanged) */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
