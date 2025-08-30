@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.99</title>
+<title>ROCKET MO — v2.00</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -111,7 +111,7 @@
 
 <script>
 (() => {
-  const VERSION='1.99';
+  const VERSION='2.00';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -222,39 +222,45 @@
     return { cap, body };
   }
 
-  /* ------- Horizontal bar builder (fixed) ------- */
-  function rotateCanvas90(src){
+  /* --- helpers for “whole PNG” horizontal bars --- */
+  function rotateLeftCanvas(srcCanvas){
     const c=document.createElement('canvas');
-    c.width=src.height;   // swapped
-    c.height=src.width;
+    c.width=srcCanvas.height;  // swap
+    c.height=srcCanvas.width;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    g.translate(c.width, 0);
-    g.rotate(Math.PI/2);
-    g.drawImage(src,0,0);
+    g.translate(0, c.height);  // move origin to bottom-left
+    g.rotate(-Math.PI/2);      // 90° left (CCW)
+    g.drawImage(srcCanvas,0,0);
     return c;
   }
-  function makeHorizontalSprite(sty,len){
-    const body=sty.bottom.body;
-    const rot=rotateCanvas90(body);                  // now oriented horizontally
-    const desiredThick=Math.max(48, Math.round(sty.drawW*0.55));   // consistent thickness
-    const thick=Math.min(desiredThick, rot.height);  // don’t exceed available texture
-
-    // Make a centered strip from the rotated texture
-    const tile=document.createElement('canvas');
-    tile.width=rot.width;
-    tile.height=thick;
-    const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
-    const sy=Math.floor((rot.height - thick)/2);
-    tg.drawImage(rot, 0, sy, rot.width, thick, 0, 0, tile.width, tile.height);
-
-    // Tile across final sprite
-    const c=document.createElement('canvas'); c.width=len; c.height=thick;
+  function scaleCanvasToHeight(srcCanvas, targetH){
+    const scale=targetH/srcCanvas.height;
+    const w=Math.max(1,Math.round(srcCanvas.width*scale));
+    const c=document.createElement('canvas'); c.width=w; c.height=targetH;
     const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
-    let x=0; while(x+tile.width<=len){ g.drawImage(tile,x,0); x+=tile.width; }
-    const rem=len-x; if(rem>0) g.drawImage(tile,0,0,rem, tile.height, x,0,rem, tile.height);
+    g.drawImage(srcCanvas,0,0,w,targetH);
     return c;
   }
-  /* --------------------------------------------- */
+  function makeHorizTileFromRawBottom(imgRaw, targetThick){
+    // scale raw bottom PNG to PIPE draw width first (so textures match verticals)
+    const w=Math.round(PIPE_W); // base width before style scale; we’ll scale again with style.scale
+    const scaledBase=makeScaledCanvas(imgRaw, w, Math.round(imgRaw.naturalHeight*(w/imgRaw.naturalWidth)));
+    const rotated=rotateLeftCanvas(scaledBase);             // full image, rotated left
+    const tile=scaleCanvasToHeight(rotated, targetThick);   // keep whole image, just scale
+    return tile; // this tile will be repeated end-to-end with NO cropping
+  }
+  function makeHorizontalSpriteWhole(tileCanvas, minLen){
+    if(!tileCanvas){ // safe fallback
+      const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(minLen)); c.height=64;
+      const g=c.getContext('2d'); g.fillStyle="#2e8b57"; g.fillRect(0,0,c.width,c.height); return c;
+    }
+    const n=Math.max(1, Math.ceil(minLen / tileCanvas.width)); // do not crop, extend to full tiles
+    const c=document.createElement('canvas'); c.width=n*tileCanvas.width; c.height=tileCanvas.height;
+    const g=c.getContext('2d'); g.imageSmoothingEnabled=true;
+    for(let i=0,x=0;i<n;i++,x+=tileCanvas.width) g.drawImage(tileCanvas,x,0);
+    return c;
+  }
+  /* ----------------------------------------------- */
 
   function drawBodyTiled(g,tile,x,yStart,totalH,w,mode){
     const th=tile.height; if(totalH<=0||th<=0) return;
@@ -276,7 +282,7 @@
   // Trio tuned for the “- _ -” look
   const BUFFER_PIXELS = Math.round(W*0.04);
   const H_BETWEEN     = Math.round(VERTICAL_X_GAP*0.75);
-  const H_BAR_LEN     = Math.round(VERTICAL_X_GAP*0.80);
+  const H_BAR_MINLEN  = Math.round(VERTICAL_X_GAP*0.80); // minimum; actual sprite extends to full tiles
   const H_LANES       = [ Math.round(H*0.30), Math.round(H*0.52), Math.round(H*0.74) ];
   const TRIO_ORDER    = [0,2,1]; // top, bottom, mid
 
@@ -291,6 +297,7 @@
 
   let reservedUntilX=0;
 
+  // find rightmost vertical edge so trios start strictly after
   function maxVerticalRightEdge(minX){
     let m=minX;
     for(const o of obstacles){ if(o.type==='V'){ const r=o.x+o.w; if(r>m) m=r; } }
@@ -313,10 +320,11 @@
 
   function scheduleHorizontal(xPos, laneIndex){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx];
-    const sprite=makeHorizontalSprite(sty,H_BAR_LEN);
+    // Build a whole-image, rotated-left, repeated bar (no cropping)
+    const sprite=makeHorizontalSpriteWhole(sty.hTile, H_BAR_MINLEN);
     obstacles.push({
       type:'H', x:xPos, y:H_LANES[laneIndex],
-      len:H_BAR_LEN, thick:sprite.height, styleIndex:idx,
+      len:sprite.width, thick:sprite.height, styleIndex:idx,
       sprite, scored:false
     });
   }
@@ -330,7 +338,12 @@
 
   function spawnHorizontalTrio(){
     const startAfter = Math.max(xCursor, maxVerticalRightEdge(xCursor)) + BUFFER_PIXELS;
-    const x1 = startAfter, x2 = x1 + H_BETWEEN, x3 = x2 + H_BETWEEN, after = x3 + BUFFER_PIXELS;
+    const x1 = startAfter, x2 = x1 + H_BETWEEN, x3 = x2 + H_BETWEEN;
+
+    // we don't know exact bar widths (no cropping), so compute after we create the first bar tile width
+    // but spacing is based on x1/x2/x3 only; the bars themselves render at their own lengths.
+    const tmpSprite = makeHorizontalSpriteWhole(Styles[0].hTile, H_BAR_MINLEN); // just to get min bar width
+    const after = x3 + BUFFER_PIXELS + tmpSprite.width;
 
     reservedUntilX = after;
     purgeVerticalsInCorridor(x1, after);
@@ -367,15 +380,14 @@
   const lastBadge=document.getElementById('lastBadge'); const godPill=document.getElementById('godPill');
   let score=0, lastScore=0; let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
 
-  let godMode=false;
-  let godTapCount=0;
-  const GOD_TAPS=10;
+  let godMode=false, godTapCount=0; const GOD_TAPS=10;
   function setGodMode(on){ godMode=!!on; godPill.classList.toggle('hidden', !godMode); }
   lastBadge.addEventListener('click', (e)=>{ e.stopPropagation(); godTapCount++; if(godTapCount>=GOD_TAPS){ setGodMode(!godMode); godTapCount=0; } }, {passive:false});
 
   function collideAndScore(){
     const bx1=bird.x+BIRD_INSET, bx2=bird.x+bird.w-BIRD_INSET;
     const by1=bird.yRender-(bird.h/2-BIRD_INSET), by2=bird.yRender+(bird.h/2-BIRD_INSET);
+
     for(const o of obstacles){
       if(o.type==='V'){
         const overlapX=(bx2>o.x)&&(bx1<o.x+o.w);
@@ -385,7 +397,10 @@
         }
         if(!o.scored && (o.x+o.w)<bx1){
           o.scored=true;
-          if(!godMode){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
+          if(!godMode){
+            score++; scoreEl.textContent=score;
+            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+          }
         }
       } else {
         const rx1=o.x, rx2=o.x+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
@@ -393,7 +408,10 @@
         if(overlap){ if(!godMode){ endGame(o.styleIndex); return true; } }
         if(!o.scored && rx2<bx1){
           o.scored=true;
-          if(!godMode){ score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
+          if(!godMode){
+            score++; scoreEl.textContent=score;
+            if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+          }
         }
       }
     }
@@ -419,9 +437,11 @@
     if(state==='playing') return;
     state='playing'; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
+
     obstacles.length=0; worldScroll=0;
     xCursor=W+FIRST_VERTICAL_LEAD; verticalCount=0; spawnMode=MODE_VERT; reservedUntilX=0;
-    ensureAhead();
+
+    ensureAhead(); // seed
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -455,7 +475,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* Systems content (unchanged) */
+  /* Systems panel content (unchanged) */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -558,18 +578,30 @@
       for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=rest[i*2]||null; tops[i]=rest[i*2+1]||null; }
       Raw.bottoms=bottoms; Raw.tops=tops;
 
+      // Build per-style caches
       Styles.length=0;
       for(let i=0;i<PIPE_STYLES_CFG.length;i++){
         const cfg=PIPE_STYLES_CFG[i];
-        const bot=Raw.bottoms[i], top=Raw.tops[i];
+        const botRaw=Raw.bottoms[i], topRaw=Raw.tops[i];
         const drawW=Math.round(PIPE_W*(cfg.scale||1));
-        const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom);
-        const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom);
-        Styles.push({ name:cfg.name, bottom, top:topset, drawW });
+        const bottom=buildCapBodyPx(botRaw,drawW,cfg.bottom.capPx,cfg.bottom.capFrom);
+        const topset=buildCapBodyPx(topRaw,drawW,cfg.top.capPx,cfg.top.capFrom);
+
+        // Horizontal “tile” = full raw bottom PNG, rotated left, scaled to drawW thickness
+        let hTile=null;
+        if(botRaw && botRaw.naturalWidth){
+          const rawCanvas=makeScaledCanvas(botRaw, botRaw.naturalWidth, botRaw.naturalHeight); // 1:1
+          // scale to style width first (for consistent texture), then rotate, then set height = drawW
+          const scaledToStyle=makeScaledCanvas(botRaw, drawW, Math.round(botRaw.naturalHeight*(drawW/botRaw.naturalWidth)));
+          const rotated=rotateLeftCanvas(scaledToStyle);
+          hTile=scaleCanvasToHeight(rotated, drawW); // thickness = drawW
+        }
+
+        Styles.push({ name:cfg.name, bottom, top:topset, drawW, hTile });
       }
       if(!Styles.length){
         const drawW=PIPE_W, ph=makeScaledCanvas(null,drawW,120);
-        Styles.push({ name:'PH', bottom:{cap:ph,body:ph}, top:{cap:ph,body:ph}, drawW });
+        Styles.push({ name:'PH', bottom:{cap:ph,body:ph}, top:{cap:ph,body:ph}, drawW, hTile:makeScaledCanvas(null,drawW,drawW) });
       }
     }catch(e){ console.error(e); }
     showTitle();
