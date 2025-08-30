@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.86</title>
+<title>ROCKET MO — v1.87-debug</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -105,8 +105,11 @@
 
 <script>
 (() => {
-  const VERSION='1.86';
+  const VERSION='1.87-debug';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+  /* ===== DEBUG TOGGLE: horizontal set at the beginning ===== */
+  const DEBUG_HORIZONTAL_AT_START = true;
 
   /* Canvas fit */
   const W=1920,H=1080;
@@ -135,7 +138,7 @@
   const TOP_OVERLAP_FRAC=0.30, BOTTOM_OVERLAP_FRAC=0.75;
   const BIRD_INSET=8, GAP_FORGIVE=12;
 
-  /* Bird sprite (keep your scale = 1) */
+  /* Bird sprite */
   const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12, BIRD_SPRITE_SCALE=1;
   const BIRD_ANCHOR_X_FRAC=0.58, BIRD_ANCHOR_Y_FRAC=0.50;
   let birdSprite=null, birdFallbackImg=null, bgImg=null;
@@ -224,8 +227,8 @@
   }
   function makeHorizontalSprite(sty,len){
     const body=sty.bottom.body;
-    const thick=body.width;                         /* keep original thickness */
-    const tile=document.createElement('canvas');    /* rotate 90° left */
+    const thick=body.width;        /* full thickness, not cropped */
+    const tile=document.createElement('canvas');
     tile.width=body.height; tile.height=thick;
     const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
     tg.save(); tg.translate(0, tile.height); tg.rotate(-Math.PI/2); tg.drawImage(body,0,0); tg.restore();
@@ -240,7 +243,7 @@
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  // horizontal spacing
+  // horizontal spacing (your earlier preference was 0.06; current test uses wider buffers)
   const H_BUFFER_BEFORE=Math.round(W*0.20);
   const H_BUFFER_AFTER =Math.round(W*0.20);
   const H_BETWEEN      =Math.round(W*0.25);
@@ -281,37 +284,12 @@
   function ensureAhead(){
     while(spawnCursor < W + AHEAD_LIMIT){
       if(patternMode==='VERT'){
-        // skip verticals during reserved corridor
         if(spawnCursor < reserveUntilX){ spawnCursor = reserveUntilX; continue; }
         spawnVerticalAt(spawnCursor);
         spawnCursor += VERTICAL_X_GAP;
         vertSpawned++;
         if(vertSpawned>=10){
-          patternMode='HSET';
-          hLeft=3;
-
-          // plan the horizontal set + buffers
-          const firstH  = spawnCursor + H_BUFFER_BEFORE;
-          const secondH = firstH + H_BETWEEN;
-          const thirdH  = secondH + H_BETWEEN;
-          const after   = thirdH + H_BUFFER_AFTER;
-
-          // HARD RESERVATION
-          reserveUntilX = after;
-
-          // PURGE any verticals already inside corridor [firstH, after)
-          for(let i=obstacles.length-1;i>=0;i--){
-            const o=obstacles[i];
-            if(o.type==='V'){
-              const vx1=o.x, vx2=o.x+o.w;
-              const overlaps = (vx2 > firstH) && (vx1 < after);
-              if(overlaps) obstacles.splice(i,1);
-            }
-          }
-
-          // start first horizontal now; reset lanes for variety
-          spawnCursor = firstH;
-          hLaneIdx=0;
+          planHorizontalSegment(); // switch to horizontal set
         }
       } else { // HSET
         spawnOneHorizontalAt(spawnCursor);
@@ -320,6 +298,32 @@
         else { spawnCursor += H_BUFFER_AFTER; patternMode='VERT'; vertSpawned=0; }
       }
     }
+  }
+
+  // plan a horizontal 3-bar set with buffers, reserve & purge
+  function planHorizontalSegment(){
+    patternMode='HSET';
+    hLeft=3;
+
+    const firstH  = spawnCursor + H_BUFFER_BEFORE;
+    const secondH = firstH + H_BETWEEN;
+    const thirdH  = secondH + H_BETWEEN;
+    const after   = thirdH + H_BUFFER_AFTER;
+
+    reserveUntilX = after;
+
+    // purge verticals already inside corridor [firstH, after)
+    for(let i=obstacles.length-1;i>=0;i--){
+      const o=obstacles[i];
+      if(o.type==='V'){
+        const vx1=o.x, vx2=o.x+o.w;
+        const overlaps = (vx2 > firstH) && (vx1 < after);
+        if(overlaps) obstacles.splice(i,1);
+      }
+    }
+
+    spawnCursor = firstH;
+    hLaneIdx = 0;
   }
 
   function moveWorld(dt){ const dx=SCROLL_PPS*dt; worldScroll+=dx; for(const o of obstacles){ o.x-=dx; } spawnCursor-=dx; if(reserveUntilX>0) reserveUntilX-=dx; }
@@ -376,8 +380,20 @@
     state='playing'; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
     obstacles.length=0; worldScroll=0;
+
+    // default pattern
     spawnCursor=W+FIRST_VERTICAL_LEAD; patternMode='VERT'; vertSpawned=0; hLeft=0; reserveUntilX=0;
-    ensureAhead();
+
+    // ===== DEBUG: force a horizontal set at the very beginning =====
+    if (DEBUG_HORIZONTAL_AT_START) {
+      // Put the first horizontal set immediately, with full reservation & purge
+      planHorizontalSegment(); // converts current spawnCursor into firstH set
+      // Make sure some content exists ahead
+      ensureAhead();
+    } else {
+      ensureAhead();
+    }
+
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -474,7 +490,7 @@
 
   function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
-  /* Main loop with wrap vertical */
+  /* Main loop */
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
     accumulator+=frameDt;
@@ -482,7 +498,7 @@
       if(state==='playing'){
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
 
-        // wrap with generous margins
+        // vertical wrap margins (more permissive bottom)
         const topWrap=-bird.h*TOP_OVERLAP_FRAC, bottomWrap=H+bird.h*BOTTOM_OVERLAP_FRAC;
         if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
         else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
@@ -518,7 +534,8 @@
       ]);
       birdSprite=sprite||null; birdFallbackImg=(!birdSprite && fallback)?fallback:null; bgImg=bg||null;
       const bottoms=[], tops=[]; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ bottoms[i]=rest[i*2]||null; tops[i]=rest[i*2+1]||null; }
-      Raw.bottoms=bottoms; Raw.tops=tops; (function rebuild(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({ name:cfg.name, bottom, top:topset, drawW }); } })();
+      Raw.bottoms=bottoms; Raw.tops=tops;
+      (function rebuild(){ Styles.length=0; for(let i=0;i<PIPE_STYLES_CFG.length;i++){ const cfg=PIPE_STYLES_CFG[i]; const bot=Raw.bottoms[i], top=Raw.tops[i]; const drawW=Math.round(PIPE_W*(cfg.scale||1)); const bottom=buildCapBodyPx(bot,drawW,cfg.bottom.capPx,cfg.bottom.capFrom); const topset=buildCapBodyPx(top,drawW,cfg.top.capPx,cfg.top.capFrom); Styles.push({ name:cfg.name, bottom, top:topset, drawW }); } })();
     }catch(e){ console.error(e); }
     showTitle();
   })();
