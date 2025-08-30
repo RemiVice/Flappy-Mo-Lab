@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.76</title>
+<title>ROCKET MO — v1.78</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -11,6 +11,7 @@
   html,body{ margin:0; height:100%; background:var(--bg); overflow:hidden }
   body{ font-family:"Montserrat",system-ui,-apple-system,Segoe UI,Roboto,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent }
 
+  /* Canvas */
   #game{
     position:fixed; top:50%; left:50%;
     width:1920px; height:1080px;
@@ -20,9 +21,11 @@
     border-radius:14px; border:1px solid rgba(255,255,255,.08);
   }
 
+  /* HUD */
   .hud{ position:fixed; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:12px; pointer-events:none; z-index:12 }
   .badge{ background:var(--glass); border-radius:10px; padding:4px 10px; color:#fff; font-weight:700; font-size:14px; min-width:84px; text-align:center; border:1px solid rgba(255,255,255,.1) }
 
+  /* Overlays */
   .overlay{ position:fixed; inset:0; display:grid; place-items:center; pointer-events:none; z-index:10; padding:16px; }
 
   .splash{
@@ -52,6 +55,7 @@
   #sysSpecs th{ font-weight:800; }
   #sysSpecs td:first-child{ font-weight:600; }
 
+  /* Rotation message (mobile) */
   .rot-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.78); color:#fff; display:none; align-items:center; justify-content:center; text-align:center; z-index:9; pointer-events:none; }
   .rot-overlay.show{ display:flex }
   .rot-box{ max-width:90vw; border:1px solid rgba(255,255,255,.15); border-radius:14px; padding:22px; background:rgba(20,24,28,.85) }
@@ -68,7 +72,7 @@
   <div class="badge">Best:  <span id="bestVal">0</span></div>
 </div>
 
-<!-- Start + Game Over -->
+<!-- Title + Game Over -->
 <div class="overlay">
   <div id="splash" class="splash" tabindex="0" aria-label="Title Screen">
     <h1>ROCKET MO</h1>
@@ -100,7 +104,7 @@
 
 <script>
 (() => {
-  const VERSION='1.76';
+  const VERSION='1.78';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* ---------- Canvas ---------- */
@@ -113,7 +117,7 @@
     const vw=innerWidth;
     const vh=Math.round(window.visualViewport?visualViewport.height:innerHeight);
     const s=Math.min(vw/W, vh/H);
-    const snapped=Math.round(s*100)/100; // snap to 2 decimals for less resample jitter
+    const snapped=Math.round(s*100)/100; // snap to reduce resample jitter
     canvas.style.transform=`translate(-50%,-50%) scale(${snapped})`;
   }
   addEventListener('resize',fitCSS,{passive:true});
@@ -121,14 +125,13 @@
   fitCSS();
 
   function checkOrientation(){
-    const isLand = innerWidth>=innerHeight;
     const rb=document.getElementById('rotBlock');
-    rb.classList.toggle('show', isMobile && !isLand);
+    rb.classList.toggle('show', isMobile && innerWidth<innerHeight);
   }
   addEventListener('resize',checkOrientation,{passive:true}); checkOrientation();
 
   /* ---------- Timing ---------- */
-  let physicsHz=isMobile?90:60; // smoother on 60Hz PCs, snappy on mobile
+  let physicsHz=isMobile?90:60;
   let STEP=1/physicsHz,accumulator=0,lastTs=performance.now();
   const MAX_FRAME_DT=0.12;
 
@@ -153,8 +156,8 @@
 
   /* ---------- Bird sprite (logo + flame) ---------- */
   const BIRD_SPRITE_FRAMES=4, BIRD_SPRITE_FPS=12;
-  const BIRD_SPRITE_SCALE=1.55;   // make room for the flame tail
-  const BIRD_ANCHOR_X_FRAC=0.58;  // how far to the right is the “center” inside the sprite
+  const BIRD_SPRITE_SCALE=1.55;   // width scale to show flame tail
+  const BIRD_ANCHOR_X_FRAC=0.58;  // visual center inside sprite frame
   const BIRD_ANCHOR_Y_FRAC=0.50;
 
   let birdSprite=null, birdFallbackImg=null, bgImg=null;
@@ -183,9 +186,12 @@
         const idx=Math.floor(this.animTime*BIRD_SPRITE_FPS)%BIRD_SPRITE_FRAMES;
         const sx=idx*frameW;
 
-        const drawW=this.w*BIRD_SPRITE_SCALE, drawH=this.h;
-        const ax=drawW*BIRD_ANCHOR_X_FRAC, ay=drawH*BIRD_ANCHOR_Y_FRAC;
+        /* Preserve aspect ratio of the frame */
+        const aspect = frameW / frameH;
+        const drawH  = this.h;                          // fit by height (keeps gameplay scale)
+        const drawW  = drawH * aspect * BIRD_SPRITE_SCALE;
 
+        const ax=drawW*BIRD_ANCHOR_X_FRAC, ay=drawH*BIRD_ANCHOR_Y_FRAC;
         ctx.drawImage(birdSprite, sx,0,frameW,frameH, -ax,-ay, drawW,drawH);
       } else if(birdFallbackImg && birdFallbackImg.complete && birdFallbackImg.naturalWidth){
         ctx.drawImage(birdFallbackImg, -this.w/2, -this.h/2, this.w, this.h);
@@ -261,7 +267,7 @@
     return c;
   }
 
-  // Horizontal using full bottom image (rotated left)
+  // Horizontal using full bottom image (rotated left; never cut the source)
   function makeHorizontalSprite(sty, len, thick){
     const src=sty.botImg;
     const c=document.createElement('canvas'); c.width=len; c.height=thick;
@@ -281,19 +287,21 @@
     return c;
   }
 
-  /* ---------- Obstacles ---------- */
+  /* ---------- Obstacles & spawner ---------- */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  const H_BUFFER = Math.round(W*0.06);
-  const H_BAR_LEN = Math.round(W*0.55);
+  // Your chosen buffers
+  const H_BUFFER  = Math.round(W*0.06); // before/after horizontal set
+  const H_BETWEEN = Math.round(W*0.25); // between horizontals within the set
+  const H_BAR_LEN   = Math.round(W*0.55);
   const H_BAR_THICK = Math.round(H*0.09);
-  const H_BETWEEN = Math.round(W*0.25);
 
   function spawnVerticalAt(xPos){
     if(!Styles.length) return;
     const margin=Math.round(H*0.10), maxSection=Math.round(H*0.45);
-    const minGapRequired=H-2*maxSection-2*margin, minGap=Math.max(GAP_MIN,Math.min(GAP_MAX,Math.max(0,Math.floor(minGapRequired))));
+    const minGapRequired=H-2*maxSection-2*margin;
+    const minGap=Math.max(GAP_MIN,Math.min(GAP_MAX,Math.max(0,Math.floor(minGapRequired))));
     const gap=randInt(minGap,GAP_MAX);
     let top=randInt(margin,H-gap-margin); if(top>maxSection) top=maxSection;
     let bottomH=H-(top+gap); if(bottomH>maxSection) top=H-gap-maxSection;
@@ -309,7 +317,7 @@
     obstacles.push({ type:'H', x:W, y:yMid, len:H_BAR_LEN, thick:H_BAR_THICK, styleIndex:idx, sprite, scored:false });
   }
 
-  // Pattern state
+  // Pattern state: 10 vertical, then 3 horizontals
   let patternMode='VERT', vertSpawned=0, hLeft=0, nextSpawnPx=FIRST_VERTICAL_LEAD;
 
   function stepSpawner(dt){
@@ -338,10 +346,14 @@
       }
     }
   }
+  function cleanupObstacles(){
+    for(let i=obstacles.length-1;i>=0;i--){
+      const o=obstacles[i];
+      if((o.type==='V' && o.x+o.w<=0) || (o.type==='H' && o.x+o.len<=0)) obstacles.splice(i,1);
+    }
+  }
 
-  function cleanupObstacles(){ for(let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; if((o.type==='V' && o.x+o.w<=0) || (o.type==='H' && o.x+o.len<=0)) obstacles.splice(i,1); } }
-
-  /* ---------- Scoring ---------- */
+  /* ---------- Score & collisions ---------- */
   const scoreEl=document.getElementById('scoreVal'), lastEl=document.getElementById('lastVal'), bestEl=document.getElementById('bestVal');
   let score=0, lastScore=0;
   let best=Number(localStorage.getItem('flappyMoBest')||0); bestEl.textContent=best;
@@ -358,12 +370,18 @@
           const safeTop=o.top-GAP_FORGIVE, safeBottom=o.top+o.gap+GAP_FORGIVE;
           if(by1<safeTop || by2>safeBottom){ endGame(o.styleIndex); return true; }
         }
-        if(!o.scored && (xR+o.w)<bx1){ o.scored=true; score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
+        if(!o.scored && (xR+o.w)<bx1){
+          o.scored=true; score++; scoreEl.textContent=score;
+          if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+        }
       } else {
         const xR=o.x - SCROLL_PPS*leftover, rx1=xR, rx2=xR+o.len, ry1=o.y-o.thick/2, ry2=o.y+o.thick/2;
         const overlap=(bx2>rx1)&&(bx1<rx2)&&(by2>ry1)&&(by1<ry2);
         if(overlap){ endGame(o.styleIndex); return true; }
-        if(!o.scored && rx2<bx1){ o.scored=true; score++; scoreEl.textContent=score; if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); } }
+        if(!o.scored && rx2<bx1){
+          o.scored=true; score++; scoreEl.textContent=score;
+          if(score>best){ best=score; bestEl.textContent=best; localStorage.setItem('flappyMoBest',String(best)); }
+        }
       }
     }
     return false;
@@ -412,7 +430,7 @@
     setTimeout(()=>{ restartLocked=false; }, 900);
   }
 
-  // Accept taps/clicks anywhere except inside the Game Over card
+  // Taps/clicks anywhere except inside the Game Over card
   function globalPointerStart(e){
     if(e.target.closest('#gameOverCard')) return; // allow scroll inside card
     if(state==='title'){ startGame(); return; }
@@ -443,7 +461,7 @@
     }
   });
 
-  /* ---------- Systems panel data ---------- */
+  /* ---------- Systems panel data (your content) ---------- */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -514,6 +532,7 @@
 
     while(accumulator>=STEP){
       if(state==='playing'){
+        // physics
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
 
         // wrap top/bottom
@@ -521,10 +540,12 @@
         if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
         else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
 
+        // spawner & scroll
         stepSpawner(STEP);
         for(const o of obstacles){ o.x-=SCROLL_PPS*STEP; }
         cleanupObstacles();
 
+        // animate sprite
         bird.animTime+=STEP;
       }
       accumulator-=STEP;
@@ -532,6 +553,7 @@
 
     const leftover=(state==='playing')?accumulator:0;
 
+    // render
     ctx.clearRect(0,0,W,H);
     drawBackground();
     bird.yRender = bird.y + (state==='playing' ? bird.v*leftover + 0.5*G*leftover*leftover : 0);
@@ -564,7 +586,7 @@
     }catch(_){ rebuildStyles(); }
   })();
 
-  /* ---------- Start on the title screen ---------- */
+  /* ---------- Start on title ---------- */
   showTitle();
 
 })();
