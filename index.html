@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v1.87-debug</title>
+<title>ROCKET MO — v1.90</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -105,11 +105,8 @@
 
 <script>
 (() => {
-  const VERSION='1.87-debug';
+  const VERSION='1.90';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-
-  /* ===== DEBUG TOGGLE: horizontal set at the beginning ===== */
-  const DEBUG_HORIZONTAL_AT_START = true;
 
   /* Canvas fit */
   const W=1920,H=1080;
@@ -118,7 +115,6 @@
   ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
   function fitCSS(){ const vw=innerWidth, vh=Math.round(window.visualViewport?visualViewport.height:innerHeight); const s=Math.min(vw/W, vh/H); canvas.style.transform=`translate(-50%,-50%) scale(${Math.round(s*100)/100})`; }
   addEventListener('resize',fitCSS,{passive:true}); window.visualViewport&&visualViewport.addEventListener('resize',fitCSS,{passive:true}); fitCSS();
-
   function checkOrientation(){ const rb=document.getElementById('rotBlock'); rb.classList.toggle('show', isMobile && innerWidth<innerHeight); }
   addEventListener('resize',checkOrientation,{passive:true}); checkOrientation();
 
@@ -126,7 +122,7 @@
   let physicsHz=isMobile?90:60, STEP=1/physicsHz, accumulator=0, lastTs=performance.now();
   const MAX_FRAME_DT=0.12;
 
-  /* Game params */
+  /* Game params (kept as you like) */
   const SPEED_MULT=isMobile?1.40:1.50;
   const G=4800*SPEED_MULT, LIFT_V0=-1250*SPEED_MULT, MAX_FALL=2200*SPEED_MULT;
   const baseScroll=isMobile?480:440; const SCROLL_PPS=baseScroll*SPEED_MULT;
@@ -167,7 +163,7 @@
     }
   };
 
-  /* Background */
+  /* Background helpers */
   function loadImageWithTimeout(src,timeout=6000){
     return new Promise((res)=>{ if(!src){ res(null); return; }
       const img=new Image(); img.referrerPolicy='no-referrer';
@@ -185,9 +181,10 @@
     const r2=g.createRadialGradient(W*0.85,H*0.35,50, W*0.85,H*0.35,520); r2.addColorStop(0,'rgba(255,120,60,0.14)'); r2.addColorStop(1,'rgba(255,120,60,0)'); g.fillStyle=r2; g.fillRect(0,0,W,H);
     return c; }
   function drawBackground(){ if(bgImg){ ctx.drawImage(bgImg,0,0,W,H); return; } if(!bgCache) bgCache=buildBgCache(); ctx.drawImage(bgCache,0,0); }
+  function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
 
-  /* Pipe art helpers */
-  const PIPE_STYLES_CFG=[ 
+  /* Pipe art */
+  const PIPE_STYLES_CFG=[
     { name:"Pipe 1", bottom:{url:"assets/pipe1-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe1-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 2", bottom:{url:"assets/pipe2-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe2-top.png", capPx:64, capFrom:"bottom"} },
     { name:"Pipe 3", bottom:{url:"assets/pipe3-bottom.png", capPx:64, capFrom:"top"}, top:{url:"assets/pipe3-top.png", capPx:64, capFrom:"bottom"} },
@@ -227,7 +224,7 @@
   }
   function makeHorizontalSprite(sty,len){
     const body=sty.bottom.body;
-    const thick=body.width;        /* full thickness, not cropped */
+    const thick=body.width; // full thickness, never cropped
     const tile=document.createElement('canvas');
     tile.width=body.height; tile.height=thick;
     const tg=tile.getContext('2d'); tg.imageSmoothingEnabled=true;
@@ -239,27 +236,28 @@
     return c;
   }
 
-  /* WORLD + SPAWNER with HARD RESERVATION + PURGE + LANES */
+  /* WORLD + strict cycle scheduler */
   const obstacles=[];
   const randInt=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
-  // horizontal spacing (your earlier preference was 0.06; current test uses wider buffers)
+  // spacing for horizontal segment
   const H_BUFFER_BEFORE=Math.round(W*0.20);
   const H_BUFFER_AFTER =Math.round(W*0.20);
   const H_BETWEEN      =Math.round(W*0.25);
   const H_BAR_LEN      =Math.round(W*0.55);
-
-  // fixed lanes for the 3 horizontals
   const H_LANES=[ Math.round(H*0.30), Math.round(H*0.50), Math.round(H*0.70) ];
-  let hLaneIdx=0;
-  function nextHorizontalLaneY(){ const y=H_LANES[hLaneIdx]; hLaneIdx=(hLaneIdx+1)%H_LANES.length; return y; }
+  let laneIdx=0; const nextLane=()=>{ const y=H_LANES[laneIdx]; laneIdx=(laneIdx+1)%H_LANES.length; return y; };
 
   let worldScroll=0;
-  let spawnCursor=W+FIRST_VERTICAL_LEAD;
-  let patternMode='VERT', vertSpawned=0, hLeft=0;
-  let reserveUntilX=0; // no verticals before this X when active
+  let nextX=W+FIRST_VERTICAL_LEAD;
+  let vertCount=0; // 0..9 then we inject horizontals
+  let inHorizontal=false;
+  let scheduledHorizontalLeft=0;
+  let afterCorridorX=0; // used only while injecting horizontals
 
-  function spawnVerticalAt(xPos){
+  const AHEAD_LIMIT=Math.round(W*2.2);
+
+  function scheduleVertical(xPos){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx], w=sty.drawW;
     const margin=Math.round(H*0.10), maxSection=Math.round(H*0.45);
     const minGapRequired=H-2*maxSection-2*margin;
@@ -272,61 +270,43 @@
     top=Math.max(margin,Math.min(top,H-gap-margin));
     obstacles.push({ type:'V', x:xPos, top, gap, w, styleIndex:idx, scored:false, sprite:makeVerticalSprite(sty,top,gap,w) });
   }
-  function spawnOneHorizontalAt(xPos){
+  function scheduleHorizontal(xPos){
     const idx=Math.floor(Math.random()*Styles.length), sty=Styles[idx];
     const sprite=makeHorizontalSprite(sty,H_BAR_LEN);
-    const thick=sprite.height;
-    const yMid=nextHorizontalLaneY();
-    obstacles.push({ type:'H', x:xPos, y:yMid, len:H_BAR_LEN, thick, styleIndex:idx, sprite, scored:false });
+    obstacles.push({ type:'H', x:xPos, y:nextLane(), len:H_BAR_LEN, thick:sprite.height, styleIndex:idx, sprite, scored:false });
   }
 
-  const AHEAD_LIMIT=Math.round(W*2.5);
   function ensureAhead(){
-    while(spawnCursor < W + AHEAD_LIMIT){
-      if(patternMode==='VERT'){
-        if(spawnCursor < reserveUntilX){ spawnCursor = reserveUntilX; continue; }
-        spawnVerticalAt(spawnCursor);
-        spawnCursor += VERTICAL_X_GAP;
-        vertSpawned++;
-        if(vertSpawned>=10){
-          planHorizontalSegment(); // switch to horizontal set
+    while(nextX < worldScroll + W + AHEAD_LIMIT){
+      if(!inHorizontal){
+        // schedule a vertical
+        scheduleVertical(nextX);
+        nextX += VERTICAL_X_GAP;
+        vertCount++;
+        if(vertCount>=10){
+          // switch to horizontal segment
+          inHorizontal = true;
+          scheduledHorizontalLeft = 3;
+          const firstH = nextX + H_BUFFER_BEFORE;
+          const secondH= firstH + H_BETWEEN;
+          const thirdH = secondH + H_BETWEEN;
+          afterCorridorX = thirdH + H_BUFFER_AFTER;
+
+          // schedule the 3 horizontals now
+          scheduleHorizontal(firstH);
+          scheduleHorizontal(secondH);
+          scheduleHorizontal(thirdH);
+
+          // jump nextX to after-corridor so no vertical is placed inside
+          nextX = afterCorridorX;
+          vertCount = 0; // reset for next cycle
+          inHorizontal = false; // horizontals already placed; resume verticals after corridor
         }
-      } else { // HSET
-        spawnOneHorizontalAt(spawnCursor);
-        hLeft--;
-        if(hLeft>0) spawnCursor += H_BETWEEN;
-        else { spawnCursor += H_BUFFER_AFTER; patternMode='VERT'; vertSpawned=0; }
       }
     }
   }
 
-  // plan a horizontal 3-bar set with buffers, reserve & purge
-  function planHorizontalSegment(){
-    patternMode='HSET';
-    hLeft=3;
-
-    const firstH  = spawnCursor + H_BUFFER_BEFORE;
-    const secondH = firstH + H_BETWEEN;
-    const thirdH  = secondH + H_BETWEEN;
-    const after   = thirdH + H_BUFFER_AFTER;
-
-    reserveUntilX = after;
-
-    // purge verticals already inside corridor [firstH, after)
-    for(let i=obstacles.length-1;i>=0;i--){
-      const o=obstacles[i];
-      if(o.type==='V'){
-        const vx1=o.x, vx2=o.x+o.w;
-        const overlaps = (vx2 > firstH) && (vx1 < after);
-        if(overlaps) obstacles.splice(i,1);
-      }
-    }
-
-    spawnCursor = firstH;
-    hLaneIdx = 0;
-  }
-
-  function moveWorld(dt){ const dx=SCROLL_PPS*dt; worldScroll+=dx; for(const o of obstacles){ o.x-=dx; } spawnCursor-=dx; if(reserveUntilX>0) reserveUntilX-=dx; }
+  function moveWorld(dt){ const dx=SCROLL_PPS*dt; worldScroll+=dx; for(const o of obstacles){ o.x-=dx; } nextX-=dx; }
   function cleanupObstacles(){ for(let i=obstacles.length-1;i>=0;i--){ const o=obstacles[i]; if((o.type==='V' && o.x+o.w<=0) || (o.type==='H' && o.x+o.len<=0)) obstacles.splice(i,1); } }
 
   /* HUD + scoring */
@@ -380,20 +360,8 @@
     state='playing'; restartLocked=false;
     lastScore=score; lastEl.textContent=lastScore; score=0; scoreEl.textContent='0';
     obstacles.length=0; worldScroll=0;
-
-    // default pattern
-    spawnCursor=W+FIRST_VERTICAL_LEAD; patternMode='VERT'; vertSpawned=0; hLeft=0; reserveUntilX=0;
-
-    // ===== DEBUG: force a horizontal set at the very beginning =====
-    if (DEBUG_HORIZONTAL_AT_START) {
-      // Put the first horizontal set immediately, with full reservation & purge
-      planHorizontalSegment(); // converts current spawnCursor into firstH set
-      // Make sure some content exists ahead
-      ensureAhead();
-    } else {
-      ensureAhead();
-    }
-
+    nextX=W+FIRST_VERTICAL_LEAD; vertCount=0; inHorizontal=false; laneIdx=0;
+    ensureAhead();
     bird.reset(); splash.classList.add('hidden'); gameOverCard.classList.add('hidden');
   }
   function endGame(hitStyleIdx){
@@ -427,7 +395,7 @@
     if(e.key==='Enter'){ if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* System data (your content) */
+  /* System data */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -488,8 +456,6 @@
     } else { sysInfoBox.style.display='none'; sysImg.style.display='none'; }
   }
 
-  function drawVersionTag(){ ctx.fillStyle='rgba(150,150,150,.95)'; ctx.font='700 10px Montserrat,system-ui'; ctx.fillText('v'+VERSION, 14, H-14); }
-
   /* Main loop */
   function loop(ts){
     let frameDt=(ts-lastTs)/1000; if(frameDt>MAX_FRAME_DT)frameDt=MAX_FRAME_DT; if(frameDt<0)frameDt=0; lastTs=ts;
@@ -498,7 +464,7 @@
       if(state==='playing'){
         bird.v+=G*STEP; if(bird.v>MAX_FALL) bird.v=MAX_FALL; bird.y+=bird.v*STEP;
 
-        // vertical wrap margins (more permissive bottom)
+        // vertical wrap (more permissive at bottom)
         const topWrap=-bird.h*TOP_OVERLAP_FRAC, bottomWrap=H+bird.h*BOTTOM_OVERLAP_FRAC;
         if(bird.y<topWrap){ const over=topWrap-bird.y; bird.y=bottomWrap-over; }
         else if(bird.y>bottomWrap){ const over=bird.y-bottomWrap; bird.y=topWrap+over; }
