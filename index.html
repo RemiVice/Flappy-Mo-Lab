@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>ROCKET MO — v2.08 (low-latency audio)</title>
+<title>ROCKET MO — v2.09 (audio -20%)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -79,7 +79,7 @@
 
 <script>
 (() => {
-  const VERSION='2.08';
+  const VERSION='2.09';
   const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 
   /* Canvas fit */
@@ -94,25 +94,26 @@
 
   /* ================= LOW-LATENCY AUDIO (Web Audio) ================= */
   const MUTE_KEY='flappyMoMute';
+  const MASTER_GAIN = 0.8; // 20% lower global volume
   let muted = localStorage.getItem(MUTE_KEY)==='1';
   const muteBadge=document.getElementById('muteBadge');
   function updateMuteBadge(){ muteBadge.textContent = muted ? '🔇' : '🔊'; }
   updateMuteBadge();
 
-  // Tiny engine: pre-decodes buffers, starts immediately on gesture
   const AudioEngine = (() => {
     const Ctx = window.AudioContext||window.webkitAudioContext;
     const ctx = new Ctx({latencyHint:'interactive'});
-    const master = ctx.createGain(); master.connect(ctx.destination);
+    const master = ctx.createGain(); 
+    master.gain.value = muted ? 0 : MASTER_GAIN; // apply -20% here
+    master.connect(ctx.destination);
     const buffers = Object.create(null);
     async function fetchDecode(url){
       try{
         const res=await fetch(url,{cache:'force-cache'});
         if(!res.ok) return null;
         const arr=await res.arrayBuffer();
-        return await new Promise((resolve,reject)=>{
-          // Safari decodeAudioData sometimes uses callbacks
-          const cbOk=b=>resolve(b), cbBad=e=>resolve(null);
+        return await new Promise((resolve)=>{
+          const cbOk=b=>resolve(b), cbBad=()=>resolve(null);
           const p=ctx.decodeAudioData(arr,cbOk,cbBad);
           if(p && p.then) p.then(resolve).catch(()=>resolve(null));
         });
@@ -135,8 +136,11 @@
       try{ src.start(t); }catch(_){}
     }
     async function resume(){ if(ctx.state!=='running'){ try{ await ctx.resume(); }catch(_){}} }
-    function setMuted(m){ muted=!!m; localStorage.setItem(MUTE_KEY, muted?'1':'0'); updateMuteBadge(); master.gain.value = muted ? 0 : 1; }
-    function warm(){ // prime hardware path with silent blip (reduces first-play jitter)
+    function setMuted(m){ 
+      muted=!!m; localStorage.setItem(MUTE_KEY, muted?'1':'0'); updateMuteBadge(); 
+      master.gain.value = muted ? 0 : MASTER_GAIN; // keep master at -20% when unmuted
+    }
+    function warm(){
       try{
         const b = ctx.createBuffer(1, Math.max(1,Math.floor(ctx.sampleRate*0.02)), ctx.sampleRate);
         const s = ctx.createBufferSource(); s.buffer=b;
@@ -147,7 +151,6 @@
     return {ctx,load,play,resume,setMuted,warm};
   })();
 
-  // Start loading as early as possible; will still need a user gesture to hear anything
   const audioPaths = (folder,id)=>[
     `assets/audio/${folder}/${id}.ogg`,
     `assets/audio/${folder}/${id}.mp3`,
@@ -164,7 +167,6 @@
 
   muteBadge.addEventListener('click', (e)=>{ e.stopPropagation(); AudioEngine.setMuted(!muted); }, {passive:false});
 
-  // Unlock/resume + warm on first gesture/keydown (required by iOS Safari)
   let audioUnlocked=false;
   function unlockAudio(){ if(audioUnlocked) return; audioUnlocked=true; AudioEngine.resume(); AudioEngine.warm(); }
 
@@ -476,7 +478,7 @@
     if(e.key==='Enter'){ unlockAudio(); if(state==='title') startGame(); else if(state==='gameover' && !restartLocked) startGame(); }
   });
 
-  /* Systems content (unchanged) */
+  /* Systems content */
   const SYSTEMS=[
     { title:"EATNASTAK (DOUBLE FACE)", img:"assets/pipe1.png",
       blurb:"When it comes to library storage solutions, Aetnastak is the industry standard. This innovative compact cantilever shelving system offers unmatched flexibility, allowing you to reconfigure it as often as needed to suit your evolving preferences. Whether expanding your collection or rearranging your space, Aetnastak provides the adaptability and reliability you need for efficient and organized library management.",
@@ -630,7 +632,6 @@
     showTitle(); // enter start screen
   })();
 
-  // Safety: keep splash visible if something throws
   addEventListener('error', ()=>{ try{ document.getElementById('splash').classList.remove('hidden'); }catch(_){} }, {capture:true});
 
 })();
